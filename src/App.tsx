@@ -92,7 +92,7 @@ export default function App() {
         <div className="flex items-center gap-2.5">
           <Zap size={18} color={TEAL} />
           <span className="text-[15px] font-semibold tracking-[0.02em] text-[#f0f2f5]">
-            Q-Net Finance
+            Comparative Analysis of Quantum Neural Networks in Finance
           </span>
           <span className="mx-1 text-[15px] text-white/25">|</span>
           <span className="font-mono text-[13px] font-normal uppercase tracking-[0.08em] text-[#8892a4]">
@@ -106,8 +106,6 @@ export default function App() {
             {serviceState}
           </span>
         </div>
-
-        <div className="w-30" />
       </header>
 
       <div className="px-6 pb-0 pt-5">
