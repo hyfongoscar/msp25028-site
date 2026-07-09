@@ -13,6 +13,7 @@ export default defineConfig({
       name: "yfinance-api",
       configureServer(server) {
         server.middlewares.use(async (req, res, next) => {
+          console.log("Incoming request:", req.url);
           if (!req.url?.startsWith("/api/finance")) {
             return next();
           }

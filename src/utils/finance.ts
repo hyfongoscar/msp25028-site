@@ -1,6 +1,11 @@
 import type { ChartResultArray } from "yahoo-finance2/modules/chart";
 import type { PricePoint, StockPayload } from "../types/finance";
 
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+const apiBaseUrl = configuredApiBaseUrl
+  ? configuredApiBaseUrl
+  : `${window.location.origin}/api`;
+
 function buildForecast(points: PricePoint[]) {
   const recent = points.slice(-8);
   const averageChange =
@@ -30,7 +35,7 @@ function buildForecast(points: PricePoint[]) {
 
 async function fetchStockData(symbol: string): Promise<StockPayload> {
   const response = await fetch(
-    `/api/finance?symbol=${encodeURIComponent(symbol)}&interval=1d&range=6mo`,
+    `${apiBaseUrl.replace(/\/$/, "")}/finance?symbol=${encodeURIComponent(symbol)}&interval=1d&range=6mo`,
   );
 
   if (!response.ok) {
