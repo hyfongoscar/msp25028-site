@@ -1,4 +1,4 @@
 fastapi
-torch=2.2.0+cpu
+torch==2.2.0+cpu
 numpy
 uvicorn
