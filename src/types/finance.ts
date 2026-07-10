@@ -1,7 +1,6 @@
 export type PricePoint = {
   date: string;
-  actual: number;
-  forecast: number;
+  price: number;
 };
 
 export type StockSummary = {

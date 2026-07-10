@@ -8,63 +8,36 @@ import {
 } from "recharts";
 import type MODELS from "../utils/models";
 import { PURPLE, TEAL } from "../utils/colors";
-
-type PricePoint = {
-  date: string;
-  actual: number;
-  forecast: number;
-};
+import type { PricePoint, StockSummary } from "../types/finance";
 
 type Props = {
   model: (typeof MODELS)[0];
   active: boolean;
   onClick: () => void;
-  series: PricePoint[];
+  trueSeries: PricePoint[];
+  predictedSeries: PricePoint[];
 };
 
-function ModelCard({ model, active, onClick, series }: Props) {
-  const sparkData = useMemo(
-    () =>
-      series.slice(-8).map((point, index) => ({
-        i: index,
-        a: point.actual,
-        b: point.forecast,
-      })),
-    [series],
-  );
-
-  const metrics = useMemo(() => {
-    if (!series.length) {
-      return { mse: "—", accuracy: "—", date: "Awaiting data" };
+function ModelCard({
+  model,
+  active,
+  onClick,
+  trueSeries,
+  predictedSeries,
+}: Props) {
+  const sparkData = useMemo(() => {
+    if (
+      predictedSeries.length === 0 ||
+      predictedSeries.length !== trueSeries.length
+    ) {
+      return trueSeries.map((point, index) => {
+        return { i: index, a: point.price, b: 0 };
+      });
     }
-
-    const latest = series[series.length - 1];
-    const previous = series[series.length - 2] ?? latest;
-    const trend = latest.actual - previous.actual;
-    const volatility =
-      series.slice(-6).reduce((sum, point, index, values) => {
-        if (index === 0) return sum;
-        const prev = values[index - 1];
-        return sum + Math.abs(point.actual - prev.actual);
-      }, 0) / 5;
-
-    const mse = (volatility / 1000 / (model.id + 1)).toFixed(6);
-    const accuracy = Math.max(
-      56,
-      Math.min(
-        92,
-        72 +
-          trend / 10 +
-          (model.id % 2 === 0 ? volatility / 80 : -volatility / 120),
-      ),
-    ).toFixed(1);
-
-    return {
-      mse,
-      accuracy: `${accuracy}%`,
-      date: latest.date,
-    };
-  }, [model.id, series]);
+    return predictedSeries.map((point, index) => {
+      return { i: index, a: point.price, b: trueSeries[index].price };
+    });
+  }, [trueSeries]);
 
   return (
     <button
@@ -76,25 +49,6 @@ function ModelCard({ model, active, onClick, series }: Props) {
       >
         {model.title}
       </p>
-
-      <div className="mb-3 space-y-1">
-        <div className="flex items-baseline justify-between">
-          <span className="text-[10px] text-[#8892a4]">MSE</span>
-          <span className="font-mono text-[12px] font-semibold text-[#f0f2f5]">
-            {metrics.mse}
-          </span>
-        </div>
-        <div className="flex items-baseline justify-between">
-          <span className="text-[10px] text-[#8892a4]">Dir. Accuracy</span>
-          <span className="font-mono text-[12px] font-semibold text-cyan-400">
-            {metrics.accuracy}
-          </span>
-        </div>
-        <div className="flex items-baseline justify-between">
-          <span className="text-[10px] text-[#8892a4]">Last Trained</span>
-          <span className="text-[10px] text-[#8892a4]">{metrics.date}</span>
-        </div>
-      </div>
 
       <div className="mt-2 h-12">
         {model.vizType === "bar" ? (

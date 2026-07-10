@@ -6,30 +6,22 @@ const apiBaseUrl = configuredApiBaseUrl
   ? configuredApiBaseUrl
   : `${window.location.origin}/api`;
 
-function buildForecast(points: PricePoint[]) {
-  const recent = points.slice(-8);
-  const averageChange =
-    recent.reduce((sum, point, index) => {
-      if (index === 0) return sum;
-      const previous = recent[index - 1];
-      return sum + (point.actual - previous.actual);
-    }, 0) / Math.max(recent.length - 1, 1);
-  const volatility =
-    recent.reduce((sum, point, index) => {
-      if (index === 0) return sum;
-      const previous = recent[index - 1];
-      return sum + Math.abs(point.actual - previous.actual);
-    }, 0) / Math.max(recent.length - 1, 1);
+async function fetchForecast(
+  prices: PricePoint[],
+  model: string,
+): Promise<PricePoint[]> {
+  const response = await fetch(
+    `${apiBaseUrl.replace(/\/$/, "")}/predict?model_name=${encodeURIComponent(model)}&prices=[${prices.map((s) => s.price).join(",")}]`,
+  );
+  if (!response.ok) {
+    throw new Error("Unable to reach the predict endpoint right now.");
+  }
 
-  return points.map((point, index) => ({
-    ...point,
-    forecast: Number(
-      (
-        point.actual +
-        averageChange * 0.35 +
-        (index % 2 === 0 ? 1 : -1) * (volatility / 20)
-      ).toFixed(2),
-    ),
+  const result = (await response.json()) as { predictions: number[] };
+
+  return result.predictions.map((p, i) => ({
+    date: prices[i].date,
+    price: p,
   }));
 }
 
@@ -58,8 +50,7 @@ async function fetchStockData(symbol: string): Promise<StockPayload> {
               month: "short",
               day: "numeric",
             }),
-            actual: Number(close.toFixed(2)),
-            forecast: 0,
+            price: Number(close.toFixed(2)),
           };
     })
     .filter((entry): entry is PricePoint => entry !== null)
@@ -69,28 +60,26 @@ async function fetchStockData(symbol: string): Promise<StockPayload> {
     throw new Error("No historical points were returned from Yahoo Finance.");
   }
 
-  const withForecast = buildForecast(points);
-  const latest = withForecast[withForecast.length - 1];
-  const previous = withForecast[withForecast.length - 2] ?? latest;
-  const change = previous.actual
-    ? ((latest.actual - previous.actual) / previous.actual) * 100
+  const latest = points[points.length - 1];
+  const previous = points[points.length - 2] ?? latest;
+  const change = previous.price
+    ? ((latest.price - previous.price) / previous.price) * 100
     : 0;
 
   return {
-    points: withForecast,
+    points: points,
     summary: {
-      latest: latest.actual,
+      latest: latest.price,
       change,
       volatility:
-        withForecast.slice(-8).reduce((sum, point, index) => {
+        points.slice(-8).reduce((sum, point, index) => {
           if (index === 0) return sum;
-          const previousPoint =
-            withForecast[withForecast.length - 8 + index - 1];
-          return sum + Math.abs(point.actual - previousPoint.actual);
+          const previousPoint = points[points.length - 8 + index - 1];
+          return sum + Math.abs(point.price - previousPoint.price);
         }, 0) / 7,
-      trend: latest.actual - previous.actual,
+      trend: latest.price - previous.price,
     },
   };
 }
 
-export { fetchStockData };
+export { fetchStockData, fetchForecast };

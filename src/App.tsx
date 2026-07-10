@@ -14,7 +14,7 @@ import { TEAL } from "./utils/colors";
 import ModelCard from "./components/ModelCard";
 import MODELS from "./utils/models";
 import type { PricePoint, StockSummary } from "./types/finance";
-import { fetchStockData } from "./utils/finance";
+import { fetchStockData, fetchForecast } from "./utils/finance";
 
 const STOCKS = [
   { label: "AAPL (Apple Inc.)", value: "AAPL" },
@@ -27,11 +27,12 @@ const STOCKS = [
 
 export default function App() {
   const [selectedStock, setSelectedStock] = useState("AAPL");
-  const [activeModel, setActiveModel] = useState(1);
+  const [activeModel, setActiveModel] = useState("qlstm");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const [ran, setRan] = useState(false);
   const [priceData, setPriceData] = useState<PricePoint[]>([]);
+  const [predictedData, setPredictedData] = useState<PricePoint[]>([]);
   const [summary, setSummary] = useState<StockSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,11 +45,14 @@ export default function App() {
 
       try {
         const result = await fetchStockData(symbol);
+        const predictions = await fetchForecast(result.points, activeModel);
         setPriceData(result.points);
+        setPredictedData(predictions);
         setSummary(result.summary);
         setRan(true);
       } catch (err) {
         setPriceData([]);
+        setPredictedData([]);
         setSummary(null);
         setError(
           err instanceof Error ? err.message : "Unable to load stock data.",
@@ -63,8 +67,29 @@ export default function App() {
   );
 
   useEffect(() => {
-    void loadData(selectedStock);
+    loadData(selectedStock);
   }, [loadData, selectedStock]);
+
+  useEffect(() => {
+    (async () => {
+      setPredictedData(await fetchForecast(priceData, activeModel));
+    })();
+  }, [activeModel]);
+
+  const chartData = useMemo(() => {
+    if (priceData.length === 0 || predictedData.length !== priceData.length) {
+      return priceData.map((point) => {
+        return { date: point.date, actual: point.price, forecast: 0 };
+      });
+    }
+    return predictedData.map((point, index) => {
+      return {
+        date: point.date,
+        actual: point.price,
+        forecast: priceData[index].price,
+      };
+    });
+  }, [priceData, predictedData]);
 
   const handleRun = () => {
     setRunning(true);
@@ -203,7 +228,8 @@ export default function App() {
                 model={model}
                 active={activeModel === model.id}
                 onClick={() => setActiveModel(model.id)}
-                series={priceData}
+                trueSeries={priceData}
+                predictedSeries={predictedData}
               />
             ))}
           </div>
@@ -245,7 +271,7 @@ export default function App() {
               <>
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart
-                    data={priceData}
+                    data={chartData}
                     margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
                   >
                     <CartesianGrid

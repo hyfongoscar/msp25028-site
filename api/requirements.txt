@@ -1,5 +1,4 @@
 fastapi
 torch
 numpy
-yfinance
-pydantic
+uvicorn
