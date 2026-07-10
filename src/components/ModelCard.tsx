@@ -8,7 +8,7 @@ import {
 } from "recharts";
 import type MODELS from "../utils/models";
 import { PURPLE, TEAL } from "../utils/colors";
-import type { PricePoint, StockSummary } from "../types/finance";
+import type { PricePoint } from "../types/finance";
 
 type Props = {
   model: (typeof MODELS)[0];
