@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, Zap } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from 'react';
+
+import { ChevronDown, Zap } from 'lucide-react';
 import {
   CartesianGrid,
   Legend,
@@ -9,20 +10,21 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-} from "recharts";
-import { TEAL } from "./utils/colors";
-import ModelCard from "./components/ModelCard";
-import MODELS from "./utils/models";
-import type { PricePoint, StockSummary } from "./types/finance";
-import { fetchStockData, fetchForecast } from "./utils/finance";
+} from 'recharts';
+
+import ModelCard from './components/ModelCard';
+import type { PricePoint, StockSummary } from './types/finance';
+import { TEAL } from './utils/colors';
+import { fetchForecast, fetchStockData } from './utils/finance';
+import MODELS from './utils/models';
 
 const STOCKS = [
-  { label: "AAPL (Apple Inc.)", value: "AAPL" },
-  { label: "TSLA (Tesla, Inc.)", value: "TSLA" },
-  { label: "MSFT (Microsoft Corp.)", value: "MSFT" },
-  { label: "AMZN (Amazon.com Inc.)", value: "AMZN" },
-  { label: "NVDA (NVIDIA Corp.)", value: "NVDA" },
-  { label: "GOOGL (Alphabet Inc.)", value: "GOOGL" },
+  { label: 'AAPL (Apple Inc.)', value: 'AAPL' },
+  { label: 'TSLA (Tesla, Inc.)', value: 'TSLA' },
+  { label: 'MSFT (Microsoft Corp.)', value: 'MSFT' },
+  { label: 'AMZN (Amazon.com Inc.)', value: 'AMZN' },
+  { label: 'NVDA (NVIDIA Corp.)', value: 'NVDA' },
+  { label: 'GOOGL (Alphabet Inc.)', value: 'GOOGL' },
 ];
 
 const defaultPredictions: Record<string, PricePoint[]> = {
@@ -33,54 +35,59 @@ const defaultPredictions: Record<string, PricePoint[]> = {
 };
 
 export default function App() {
-  const [selectedStock, setSelectedStock] = useState("AAPL");
-  const [activeModel, setActiveModel] = useState("qlstm");
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [running, setRunning] = useState(false);
-  const [ran, setRan] = useState(false);
+  const [selectedStock, setSelectedStock] = useState('AAPL');
+  const [activeModel, setActiveModel] = useState('qlstm');
+
+  const [loadedStock, setLoadedStock] = useState<string | null>(null);
   const [priceData, setPriceData] = useState<PricePoint[]>([]);
   const [predictedData, setPredictedData] = useState(defaultPredictions);
   const [summary, setSummary] = useState<StockSummary | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadData = useCallback(
-    async (symbol = selectedStock) => {
-      setLoading(true);
-      setError(null);
-      setRan(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [ran, setRan] = useState(false);
 
-      try {
-        const result = await fetchStockData(symbol);
-        const predictions = await fetchForecast(result.points);
-        setPriceData(result.points);
-        setPredictedData(predictions);
-        setSummary(result.summary);
-        setRan(true);
-      } catch (err) {
-        setPriceData([]);
-        setPredictedData(defaultPredictions);
-        setSummary(null);
-        setError(
-          err instanceof Error ? err.message : "Unable to load stock data.",
-        );
-        setRan(false);
-      } finally {
-        setLoading(false);
-        setRunning(false);
-      }
-    },
-    [selectedStock],
-  );
+  const loadData = useCallback(async (symbol: string) => {
+    setLoading(true);
+    setError(null);
+    setRan(false);
+
+    try {
+      const result = await fetchStockData(symbol);
+      const predictions = await fetchForecast(result.points);
+      setLoadedStock(symbol);
+      setPriceData(result.points);
+      setPredictedData(predictions);
+      setSummary(result.summary);
+      setRan(true);
+    } catch (err) {
+      setLoadedStock(null);
+      setPriceData([]);
+      setPredictedData(defaultPredictions);
+      setSummary(null);
+      setError(
+        err instanceof Error ? err.message : 'Unable to load stock data.',
+      );
+      setRan(false);
+    } finally {
+      setLoading(false);
+      setRunning(false);
+    }
+  }, []);
 
   useEffect(() => {
-    void loadData();
+    (async () => {
+      void loadData('AAPL');
+    })();
   }, [loadData]);
 
   const chartData = useMemo(() => {
     const predictions = predictedData[activeModel] || [];
     if (priceData.length === 0 || predictions.length !== priceData.length) {
-      return priceData.map((point) => {
+      return priceData.map(point => {
         return { date: point.date, actual: point.price, forecast: 0 };
       });
     }
@@ -91,7 +98,7 @@ export default function App() {
         forecast: priceData[index].price,
       };
     });
-  }, [priceData, predictedData]);
+  }, [predictedData, activeModel, priceData]);
 
   const handleRun = () => {
     setRunning(true);
@@ -99,17 +106,16 @@ export default function App() {
   };
 
   const selectedLabel =
-    STOCKS.find((s) => s.value === selectedStock)?.label ?? selectedStock;
+    STOCKS.find(s => s.value === selectedStock)?.label ?? selectedStock;
   const serviceState = loading
-    ? "Loading live market data..."
+    ? 'Loading live market data...'
     : error
-      ? "API unavailable"
-      : "Model Service: ONLINE";
+      ? 'API unavailable'
+      : 'Model Service: ONLINE';
 
   const activeModelTitle = useMemo(
     () =>
-      MODELS.find((model) => model.id === activeModel)?.title ??
-      "Quantum Model",
+      MODELS.find(model => model.id === activeModel)?.title ?? 'Quantum Model',
     [activeModel],
   );
 
@@ -117,7 +123,7 @@ export default function App() {
     <div className="flex min-h-screen flex-col bg-[#101217] font-sans text-[#f0f2f5]">
       <header className="sticky top-0 z-50 flex h-14 shrink-0 items-center justify-between border-b border-white/10 bg-[#1A1F2C] px-6">
         <div className="flex items-center gap-2.5">
-          <Zap size={18} color={TEAL} />
+          <Zap color={TEAL} size={18} />
           <span className="text-[15px] font-semibold tracking-[0.02em] text-[#f0f2f5]">
             Comparative Analysis of Quantum Neural Networks in Finance
           </span>
@@ -152,29 +158,29 @@ export default function App() {
               Select Stock/Asset (Yahoo Finance)
             </label>
             <button
-              onClick={() => setDropdownOpen((value) => !value)}
               className="flex w-full items-center justify-between rounded-lg border border-white/10 bg-[#222736] px-3 py-2.5 text-left text-[13px] text-[#f0f2f5] transition-colors hover:border-cyan-400/70"
+              onClick={() => setDropdownOpen(value => !value)}
             >
               <span className="overflow-hidden text-ellipsis whitespace-nowrap">
                 {selectedLabel}
               </span>
               <ChevronDown
-                size={14}
+                className={`shrink-0 transition-transform ${dropdownOpen ? 'rotate-180' : 'rotate-0'}`}
                 color="#8892a4"
-                className={`shrink-0 transition-transform ${dropdownOpen ? "rotate-180" : "rotate-0"}`}
+                size={14}
               />
             </button>
 
             {dropdownOpen && (
               <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 overflow-hidden rounded-lg border border-white/10 bg-[#222736] shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
-                {STOCKS.map((stock) => (
+                {STOCKS.map(stock => (
                   <button
+                    className={`block w-full px-3 py-2.5 text-left text-[13px] ${stock.value === selectedStock ? 'bg-cyan-400/10 text-cyan-400' : 'text-[#f0f2f5] hover:bg-white/5'}`}
                     key={stock.value}
                     onClick={() => {
                       setSelectedStock(stock.value);
                       setDropdownOpen(false);
                     }}
-                    className={`block w-full px-3 py-2.5 text-left text-[13px] ${stock.value === selectedStock ? "bg-cyan-400/10 text-cyan-400" : "text-[#f0f2f5] hover:bg-white/5"}`}
                   >
                     {stock.label}
                   </button>
@@ -184,12 +190,12 @@ export default function App() {
           </div>
 
           <button
-            onClick={handleRun}
+            className={`flex items-center justify-center gap-1.5 rounded-lg px-0 py-2.5 text-[13px] font-bold tracking-[0.02em] text-[#101217] transition-colors ${running ? 'cursor-not-allowed bg-cyan-400/30' : 'bg-cyan-400 hover:bg-cyan-300'}`}
             disabled={running}
-            className={`flex items-center justify-center gap-1.5 rounded-lg px-0 py-2.5 text-[13px] font-bold tracking-[0.02em] text-[#101217] transition-colors ${running ? "cursor-not-allowed bg-cyan-400/30" : "bg-cyan-400 hover:bg-cyan-300"}`}
+            onClick={handleRun}
           >
             <Zap size={14} />
-            {running ? "Running..." : "Run Inference"}
+            {running ? 'Running...' : 'Run Inference'}
           </button>
 
           {ran && !error && (
@@ -224,11 +230,11 @@ export default function App() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            {MODELS.map((model) => (
+            {MODELS.map(model => (
               <ModelCard
+                active={activeModel === model.id}
                 key={model.id}
                 model={model}
-                active={activeModel === model.id}
                 onClick={() => setActiveModel(model.id)}
               />
             ))}
@@ -238,13 +244,13 @@ export default function App() {
             <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
                 <p className="m-0 mb-0.5 text-[13px] font-semibold text-[#f0f2f5]">
-                  Price Forecast — {selectedStock}
+                  Price Forecast — {loadedStock}
                 </p>
                 <p className="m-0 text-[11px] text-[#8892a4]">
-                  {activeModelTitle} ·{" "}
+                  {activeModelTitle} ·{' '}
                   {summary
                     ? `$${summary.latest.toFixed(2)} latest`
-                    : "Live data pending"}
+                    : 'Live data pending'}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-4">
@@ -269,79 +275,79 @@ export default function App() {
               </div>
             ) : (
               <>
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer height={300} width="100%">
                   <LineChart
                     data={chartData}
                     margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
                   >
                     <CartesianGrid
-                      strokeDasharray="3 3"
                       stroke="rgba(255,255,255,0.05)"
+                      strokeDasharray="3 3"
                     />
                     <XAxis
+                      axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
                       dataKey="date"
+                      interval={9}
                       tick={{
-                        fill: "#8892a4",
+                        fill: '#8892a4',
                         fontSize: 10,
-                        fontFamily: "JetBrains Mono, monospace",
+                        fontFamily: 'JetBrains Mono, monospace',
                       }}
                       tickLine={false}
-                      axisLine={{ stroke: "rgba(255,255,255,0.08)" }}
-                      interval={9}
                     />
                     <YAxis
-                      tick={{
-                        fill: "#8892a4",
-                        fontSize: 10,
-                        fontFamily: "JetBrains Mono, monospace",
-                      }}
-                      tickLine={false}
-                      axisLine={{ stroke: "rgba(255,255,255,0.08)" }}
-                      tickFormatter={(value) => `$${value}`}
+                      axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
+                      domain={['auto', 'auto']}
                       label={{
-                        value: "Price (USD)",
+                        value: 'Price (USD)',
                         angle: -90,
-                        position: "insideLeft",
+                        position: 'insideLeft',
                         offset: 12,
                         style: {
-                          fill: "#8892a4",
+                          fill: '#8892a4',
                           fontSize: 10,
-                          fontFamily: "Inter, sans-serif",
+                          fontFamily: 'Inter, sans-serif',
                         },
                       }}
+                      tick={{
+                        fill: '#8892a4',
+                        fontSize: 10,
+                        fontFamily: 'JetBrains Mono, monospace',
+                      }}
+                      tickFormatter={value => `$${value}`}
+                      tickLine={false}
                       width={60}
-                      domain={["auto", "auto"]}
                     />
                     <Tooltip
                       contentStyle={{
-                        backgroundColor: "#222736",
-                        border: "1px solid rgba(255,255,255,0.12)",
+                        backgroundColor: '#222736',
+                        border: '1px solid rgba(255,255,255,0.12)',
                         borderRadius: 12,
                       }}
-                      labelStyle={{ color: "#f0f2f5" }}
                       formatter={(value, name) => [
                         `$${Number(value).toFixed(2)}`,
                         name,
                       ]}
+                      labelStyle={{ color: '#f0f2f5' }}
                     />
-                    <Legend wrapperStyle={{ display: "none" }} />
+                    <Legend wrapperStyle={{ display: 'none' }} />
                     <Line
-                      type="monotone"
+                      activeDot={{ r: 4, fill: '#fff' }}
                       dataKey="actual"
+                      dot={false}
                       name="Actual Price"
                       stroke="rgba(255,255,255,0.7)"
                       strokeWidth={1.5}
-                      dot={false}
-                      activeDot={{ r: 4, fill: "#fff" }}
+                      type="monotone"
                     />
                     <Line
-                      type="monotone"
+                      activeDot={{ r: 4, fill: TEAL }}
                       dataKey="forecast"
+                      dot={false}
                       name="Model Forecast"
                       stroke={TEAL}
                       strokeWidth={1.5}
-                      dot={false}
-                      activeDot={{ r: 4, fill: TEAL }}
+                      type="monotone"
                     />
                   </LineChart>
                 </ResponsiveContainer>

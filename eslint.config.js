@@ -44,6 +44,7 @@ export default tseslint.config([
       'import/order': ['off'],
       'react/display-name': 'off',
       'react/jsx-sort-props': 'warn',
+      'react/react-in-jsx-scope': 'off',
       'prettier/prettier': ['error', prettierOptions],
 
       'simple-import-sort/imports': [

@@ -1,5 +1,6 @@
-import type { ChartResultArray } from "yahoo-finance2/modules/chart";
-import type { PricePoint, StockPayload } from "../types/finance";
+import type { ChartResultArray } from 'yahoo-finance2/modules/chart';
+
+import type { PricePoint, StockPayload } from '../types/finance';
 
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 const apiBaseUrl = configuredApiBaseUrl
@@ -10,10 +11,10 @@ async function fetchForecast(
   prices: PricePoint[],
 ): Promise<Record<string, PricePoint[]>> {
   const response = await fetch(
-    `${apiBaseUrl.replace(/\/$/, "")}/predict?&prices=[${prices.map((s) => s.price).join(",")}]`,
+    `${apiBaseUrl.replace(/\/$/, '')}/predict?&prices=[${prices.map(s => s.price).join(',')}]`,
   );
   if (!response.ok) {
-    throw new Error("Unable to reach the predict endpoint right now.");
+    throw new Error('Unable to reach the predict endpoint right now.');
   }
 
   const result = (await response.json()) as {
@@ -32,28 +33,28 @@ async function fetchForecast(
 
 async function fetchStockData(symbol: string): Promise<StockPayload> {
   const response = await fetch(
-    `${apiBaseUrl.replace(/\/$/, "")}/finance?symbol=${encodeURIComponent(symbol)}&interval=1d&range=6mo`,
+    `${apiBaseUrl.replace(/\/$/, '')}/finance?symbol=${encodeURIComponent(symbol)}&interval=1d&range=6mo`,
   );
 
   if (!response.ok) {
-    throw new Error("Unable to reach the finance endpoint right now.");
+    throw new Error('Unable to reach the finance endpoint right now.');
   }
 
   const result = (await response.json()) as ChartResultArray;
 
   if (!result || !Array.isArray(result.quotes)) {
-    throw new Error("No stock data was returned from Yahoo Finance.");
+    throw new Error('No stock data was returned from Yahoo Finance.');
   }
 
   const points: PricePoint[] = result.quotes
-    .map((quote) => {
+    .map(quote => {
       const close = quote.close;
       return close == null
         ? null
         : {
-            date: new Date(quote.date).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
+            date: new Date(quote.date).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
             }),
             price: Number(close.toFixed(2)),
           };
@@ -62,7 +63,7 @@ async function fetchStockData(symbol: string): Promise<StockPayload> {
     .slice(-60);
 
   if (!points.length) {
-    throw new Error("No historical points were returned from Yahoo Finance.");
+    throw new Error('No historical points were returned from Yahoo Finance.');
   }
 
   const latest = points[points.length - 1];
@@ -87,4 +88,4 @@ async function fetchStockData(symbol: string): Promise<StockPayload> {
   };
 }
 
-export { fetchStockData, fetchForecast };
+export { fetchForecast, fetchStockData };
