@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import List
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import torch
 import numpy as np
 
 app = FastAPI(title="Q-Net Finance Selective Model Backend")
@@ -11,18 +10,19 @@ app = FastAPI(title="Q-Net Finance Selective Model Backend")
 SEQUENCE_LENGTH = 5
 CURRENT_DIR = Path(__file__).parent
 
-def load_model_payload(model_file_name: str) -> dict:
-    file_path = CURRENT_DIR / model_file_name
+def load_model_weights(model_file_name: str) -> dict:
+    file_path = CURRENT_DIR / "artifacts" / model_file_name
     if not file_path.exists():
         print(f"Warning: Artifact {model_file_name} not found.")
         return None
-    return torch.load(file_path, map_location=torch.device('cpu'))
+    return np.load(file_path, allow_pickle=True).item()
+    # return torch.load(file_path, map_location=torch.device('cpu'))
 
 # Load the custom state payloads on server spin-up
-ARTIFACTS = {
-    "QLSTM": load_model_payload("qlstm.pt"),
-    "CustomQNN1": load_model_payload("customqnn.pt"),
-    "HybridQNN1": load_model_payload("hybridqnn1.pt"),
+WEIGHTS = {
+    "QLSTM": load_model_weights("qlstm_weights.npy"),
+    "CustomQNN1": load_model_weights("custom_qnn_weights.npy"),
+    "HybridQNN1": load_model_weights("hybrid_qnn1_weights.npy"),
 }
 
 # The dictionary mapping static baseline evaluation MSE metrics for your presentation report
@@ -34,7 +34,7 @@ STATIC_METRICS = {
 }
 
 # --- REFACTORED INFERENCE ENGINE FOR BULK FORECASTING ---
-def run_bulk_model_inference(artifact: dict, raw_prices: list) -> list:
+def run_bulk_model_inference(state_dict: dict, raw_prices: list) -> list:
     """
     Slided a sequence window across the entire historical price list,
     generating a matching list of predictions for historical visualization.
@@ -51,15 +51,13 @@ def run_bulk_model_inference(artifact: dict, raw_prices: list) -> list:
     
     predictions_scaled = []
     
-    # Extract weights payload
-    state_dict = artifact.get("state_dict", {}) if artifact else {}
     weight_matrix = None
-    if state_dict:
-        try:
-            weight_key = [k for k in state_dict.keys() if 'weight' in k][0]
-            weight_matrix = state_dict[weight_key]
-        except Exception:
-            weight_matrix = None
+    try:
+        weight_key = [k for k in state_dict.keys() if 'weight' in k][0]
+        weight_matrix = state_dict[weight_key]
+    except Exception:
+        print("Warning: Model artifacts not found.")
+        weight_matrix = None
 
     # 2. Replicate the DataLoader loop by sliding across the index timeline
     for i in range(len(scaled_prices)):
@@ -71,15 +69,19 @@ def run_bulk_model_inference(artifact: dict, raw_prices: list) -> list:
             padding = np.repeat(scaled_prices[0], SEQUENCE_LENGTH - i - 1)
             window = np.concatenate([padding, scaled_prices[0 : i + 1]])
             
-        # 3. Compute Forward Pass Matrix evaluation per step
+        # 3. Compute Forward Pass Matrix evaluation per step, use numpy instead of torch
         try:
             if weight_matrix is not None:
-                x_tensor = torch.tensor([window], dtype=torch.float32)
-                flat_x = x_tensor.flatten()[:weight_matrix.shape[1]]
-                if len(flat_x) < weight_matrix.shape[1]:
-                    flat_x = torch.cat([flat_x, torch.zeros(weight_matrix.shape[1] - len(flat_x))])
+                flat_x = window.flatten()
+                target_dim = weight_matrix.shape[1]
                 
-                step_pred = float(torch.dot(weight_matrix[0].flatten()[:len(flat_x)], flat_x).item())
+                if len(flat_x) > target_dim:
+                    flat_x = flat_x[:target_dim]
+                elif len(flat_x) < target_dim:
+                    flat_x = np.concatenate([flat_x, np.zeros(target_dim - len(flat_x))])
+                
+                weight_vec = weight_matrix[0].flatten()[:len(flat_x)]
+                step_pred = float(np.dot(weight_vec, flat_x))
             else:
                 # Benchmark mathematical mock if model artifacts aren't physically present
                 step_pred = float(window[-1] * 1.002)
@@ -131,8 +133,8 @@ def predict(prices: str, model_name: str):
     if resolved_model_name == "HybridQNN2":
         predictions_list = [float(p * 1.001) for p in price_list]
     else:
-        target_artifact = ARTIFACTS.get(resolved_model_name)
-        predictions_list = run_bulk_model_inference(target_artifact, price_list)
+        target_weights = WEIGHTS.get(resolved_model_name)
+        predictions_list = run_bulk_model_inference(target_weights, price_list)
 
     return {
         "status": "success",
