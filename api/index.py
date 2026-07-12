@@ -23,6 +23,7 @@ WEIGHTS = {
   "QLSTM": load_model_weights("qlstm_weights.npy"),
   "Custom_QNN": load_model_weights("custom_qnn_weights.npy"),
   "Hybrid_QNN1": load_model_weights("hybrid_qnn1_weights.npy"),
+  "Hybrid_QNN2": load_model_weights("hybrid_qnn2_weights.npy"),
 }
 
 # --- REFACTORED INFERENCE ENGINE FOR BULK FORECASTING ---
