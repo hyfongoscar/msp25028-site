@@ -21,16 +21,8 @@ def load_model_weights(model_file_name: str) -> dict:
 # Load the custom state payloads on server spin-up
 WEIGHTS = {
     "QLSTM": load_model_weights("qlstm_weights.npy"),
-    "CustomQNN1": load_model_weights("custom_qnn_weights.npy"),
-    "HybridQNN1": load_model_weights("hybrid_qnn1_weights.npy"),
-}
-
-# The dictionary mapping static baseline evaluation MSE metrics for your presentation report
-STATIC_METRICS = {
-    "QLSTM": 0.000231,
-    "CustomQNN1": 0.000358,
-    "HybridQNN1": 0.000192,
-    "HybridQNN2": 0.000215
+    "Custom_QNN": load_model_weights("custom_qnn_weights.npy"),
+    "Hybrid_QNN1": load_model_weights("hybrid_qnn1_weights.npy"),
 }
 
 # --- REFACTORED INFERENCE ENGINE FOR BULK FORECASTING ---
@@ -95,29 +87,12 @@ def run_bulk_model_inference(state_dict: dict, raw_prices: list) -> list:
     return predictions_unscaled
 
 
-# --- REFACTORED FASTAPI ENDPOINT SCHEMA ---
-class BulkModelMetrics(BaseModel):
-    MSE: float
-    predictions: List[float]  # Changed from a single float scalar to an array list
-
 class BulkModelResponse(BaseModel):
     status: str
-    model: str
-    MSE: float
-    predictions: List[float]
+    predictions: dict[str, List[float]]
 
 @app.get("/api/predict", response_model=BulkModelResponse)
-def predict(prices: str, model_name: str):
-    # 1. Normalize casing (handles 'qlstm' -> 'QLSTM')
-    model_name_upper = model_name.upper()
-    valid_models = ["QLSTM", "CUSTOMQNN1", "HYBRIDQNN1", "HYBRIDQNN2"]
-    
-    model_map = {m.upper(): m for m in ["QLSTM", "CustomQNN1", "HybridQNN1", "HybridQNN2"]}
-    if model_name_upper not in valid_models:
-        raise HTTPException(status_code=400, detail="Invalid model selection.")
-    
-    resolved_model_name = model_map[model_name_upper]
-
+def predict(prices: str):
     try:
         # 2. Strip the URL-encoded brackets '[' and ']' automatically
         cleaned_prices = prices.strip().lstrip("[").rstrip("]")
@@ -130,15 +105,13 @@ def predict(prices: str, model_name: str):
     if len(price_list) < SEQUENCE_LENGTH:
         raise HTTPException(status_code=400, detail="Insufficient price context length.")
 
-    if resolved_model_name == "HybridQNN2":
-        predictions_list = [float(p * 1.001) for p in price_list]
-    else:
-        target_weights = WEIGHTS.get(resolved_model_name)
+    results = {}
+    for model_name in WEIGHTS.keys():
+        target_weights = WEIGHTS.get(model_name)
         predictions_list = run_bulk_model_inference(target_weights, price_list)
+        results[model_name] = predictions_list
 
     return {
         "status": "success",
-        "model": resolved_model_name,
-        "MSE": STATIC_METRICS[resolved_model_name],
-        "predictions": predictions_list
+        "predictions": results
     }

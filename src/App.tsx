@@ -25,6 +25,13 @@ const STOCKS = [
   { label: "GOOGL (Alphabet Inc.)", value: "GOOGL" },
 ];
 
+const defaultPredictions: Record<string, PricePoint[]> = {
+  qlstm: [],
+  custom_qnn: [],
+  hybrid_qnn1: [],
+  hybrid_qnn2: [],
+};
+
 export default function App() {
   const [selectedStock, setSelectedStock] = useState("AAPL");
   const [activeModel, setActiveModel] = useState("qlstm");
@@ -32,7 +39,7 @@ export default function App() {
   const [running, setRunning] = useState(false);
   const [ran, setRan] = useState(false);
   const [priceData, setPriceData] = useState<PricePoint[]>([]);
-  const [predictedData, setPredictedData] = useState<PricePoint[]>([]);
+  const [predictedData, setPredictedData] = useState(defaultPredictions);
   const [summary, setSummary] = useState<StockSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,14 +52,14 @@ export default function App() {
 
       try {
         const result = await fetchStockData(symbol);
-        const predictions = await fetchForecast(result.points, activeModel);
+        const predictions = await fetchForecast(result.points);
         setPriceData(result.points);
         setPredictedData(predictions);
         setSummary(result.summary);
         setRan(true);
       } catch (err) {
         setPriceData([]);
-        setPredictedData([]);
+        setPredictedData(defaultPredictions);
         setSummary(null);
         setError(
           err instanceof Error ? err.message : "Unable to load stock data.",
@@ -67,22 +74,17 @@ export default function App() {
   );
 
   useEffect(() => {
-    loadData(selectedStock);
-  }, [loadData, selectedStock]);
-
-  useEffect(() => {
-    (async () => {
-      setPredictedData(await fetchForecast(priceData, activeModel));
-    })();
-  }, [activeModel]);
+    void loadData();
+  }, [loadData]);
 
   const chartData = useMemo(() => {
-    if (priceData.length === 0 || predictedData.length !== priceData.length) {
+    const predictions = predictedData[activeModel] || [];
+    if (priceData.length === 0 || predictions.length !== priceData.length) {
       return priceData.map((point) => {
         return { date: point.date, actual: point.price, forecast: 0 };
       });
     }
-    return predictedData.map((point, index) => {
+    return predictions.map((point, index) => {
       return {
         date: point.date,
         actual: point.price,
@@ -228,8 +230,6 @@ export default function App() {
                 model={model}
                 active={activeModel === model.id}
                 onClick={() => setActiveModel(model.id)}
-                trueSeries={priceData}
-                predictedSeries={predictedData}
               />
             ))}
           </div>
@@ -319,9 +319,9 @@ export default function App() {
                         borderRadius: 12,
                       }}
                       labelStyle={{ color: "#f0f2f5" }}
-                      formatter={(value) => [
+                      formatter={(value, name) => [
                         `$${Number(value).toFixed(2)}`,
-                        "Price",
+                        name,
                       ]}
                     />
                     <Legend wrapperStyle={{ display: "none" }} />

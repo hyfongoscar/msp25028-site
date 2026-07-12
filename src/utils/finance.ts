@@ -8,21 +8,26 @@ const apiBaseUrl = configuredApiBaseUrl
 
 async function fetchForecast(
   prices: PricePoint[],
-  model: string,
-): Promise<PricePoint[]> {
+): Promise<Record<string, PricePoint[]>> {
   const response = await fetch(
-    `${apiBaseUrl.replace(/\/$/, "")}/predict?model_name=${encodeURIComponent(model)}&prices=[${prices.map((s) => s.price).join(",")}]`,
+    `${apiBaseUrl.replace(/\/$/, "")}/predict?&prices=[${prices.map((s) => s.price).join(",")}]`,
   );
   if (!response.ok) {
     throw new Error("Unable to reach the predict endpoint right now.");
   }
 
-  const result = (await response.json()) as { predictions: number[] };
+  const result = (await response.json()) as {
+    predictions: Record<string, number[]>;
+  };
 
-  return result.predictions.map((p, i) => ({
-    date: prices[i].date,
-    price: p,
-  }));
+  const formattedPredictions: Record<string, PricePoint[]> = {};
+  for (const [model, predictions] of Object.entries(result.predictions)) {
+    formattedPredictions[model.toLowerCase()] = predictions.map((p, i) => ({
+      date: prices[i].date,
+      price: p,
+    }));
+  }
+  return formattedPredictions;
 }
 
 async function fetchStockData(symbol: string): Promise<StockPayload> {
