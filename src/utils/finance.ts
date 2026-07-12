@@ -1,6 +1,10 @@
 import type { ChartResultArray } from 'yahoo-finance2/modules/chart';
 
-import type { PricePoint, StockPayload } from '../types/finance';
+import type {
+  PricePoint,
+  StockPayload,
+  StockPricePoint,
+} from '../types/finance';
 
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 const apiBaseUrl = configuredApiBaseUrl
@@ -8,10 +12,10 @@ const apiBaseUrl = configuredApiBaseUrl
   : `${window.location.origin}/api`;
 
 async function fetchForecast(
-  prices: PricePoint[],
+  prices: StockPricePoint[],
 ): Promise<Record<string, PricePoint[]>> {
   const response = await fetch(
-    `${apiBaseUrl.replace(/\/$/, '')}/predict?&prices=[${prices.map(s => s.price).join(',')}]`,
+    `${apiBaseUrl.replace(/\/$/, '')}/predict?opens=[${prices.map(s => s.open).join(',')}]&highs=[${prices.map(s => s.high).join(',')}]&lows=[${prices.map(s => s.low).join(',')}]&closes=[${prices.map(s => s.close).join(',')}]&volumes=[${prices.map(s => s.volume).join(',')}]&adjCloses=[${prices.map(s => s.adjClose).join(',')}]`,
   );
   if (!response.ok) {
     throw new Error('Unable to reach the predict endpoint right now.');
@@ -46,20 +50,21 @@ async function fetchStockData(symbol: string): Promise<StockPayload> {
     throw new Error('No stock data was returned from Yahoo Finance.');
   }
 
-  const points: PricePoint[] = result.quotes
+  const points = result.quotes
     .map(quote => {
-      const close = quote.close;
-      return close == null
-        ? null
-        : {
-            date: new Date(quote.date).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-            }),
-            price: Number(close.toFixed(2)),
-          };
+      return {
+        date: new Date(quote.date).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+        }),
+        open: quote.open,
+        high: quote.high,
+        low: quote.low,
+        close: quote.close,
+        volume: quote.volume,
+        adjClose: quote.adjclose,
+      };
     })
-    .filter((entry): entry is PricePoint => entry !== null)
     .slice(-60);
 
   if (!points.length) {
@@ -68,22 +73,28 @@ async function fetchStockData(symbol: string): Promise<StockPayload> {
 
   const latest = points[points.length - 1];
   const previous = points[points.length - 2] ?? latest;
-  const change = previous.price
-    ? ((latest.price - previous.price) / previous.price) * 100
+  const trend =
+    latest.close && previous.close ? latest.close - previous.close : 0;
+  const change = previous.close
+    ? (((latest.close || 0) - previous.close) / previous.close) * 100
     : 0;
 
   return {
     points: points,
     summary: {
-      latest: latest.price,
+      latest: latest.close,
       change,
       volatility:
         points.slice(-8).reduce((sum, point, index) => {
           if (index === 0) return sum;
           const previousPoint = points[points.length - 8 + index - 1];
-          return sum + Math.abs(point.price - previousPoint.price);
+          const difference =
+            point.close && previousPoint.close
+              ? Math.abs(point.close - previousPoint.close)
+              : 0;
+          return sum + Math.abs(difference);
         }, 0) / 7,
-      trend: latest.price - previous.price,
+      trend: trend,
     },
   };
 }

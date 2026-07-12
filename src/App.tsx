@@ -13,7 +13,11 @@ import {
 } from 'recharts';
 
 import ModelCard from './components/ModelCard';
-import type { PricePoint, StockSummary } from './types/finance';
+import type {
+  PricePoint,
+  StockPricePoint,
+  StockSummary,
+} from './types/finance';
 import { TEAL } from './utils/colors';
 import { fetchForecast, fetchStockData } from './utils/finance';
 import MODELS from './utils/models';
@@ -39,7 +43,7 @@ export default function App() {
   const [activeModel, setActiveModel] = useState('qlstm');
 
   const [loadedStock, setLoadedStock] = useState<string | null>(null);
-  const [priceData, setPriceData] = useState<PricePoint[]>([]);
+  const [priceData, setPriceData] = useState<StockPricePoint[]>([]);
   const [predictedData, setPredictedData] = useState(defaultPredictions);
   const [summary, setSummary] = useState<StockSummary | null>(null);
 
@@ -86,19 +90,22 @@ export default function App() {
 
   const chartData = useMemo(() => {
     const predictions = predictedData[activeModel] || [];
+    console.log(predictions.length, priceData.length);
     if (priceData.length === 0 || predictions.length !== priceData.length) {
       return priceData.map(point => {
-        return { date: point.date, actual: point.price, forecast: 0 };
+        return { date: point.date, actual: point.close || 0, forecast: 0 };
       });
     }
     return predictions.map((point, index) => {
       return {
         date: point.date,
         actual: point.price,
-        forecast: priceData[index].price,
+        forecast: priceData[index].close,
       };
     });
   }, [predictedData, activeModel, priceData]);
+
+  console.log(chartData);
 
   const handleRun = () => {
     setRunning(true);
@@ -249,7 +256,7 @@ export default function App() {
                 <p className="m-0 text-[11px] text-[#8892a4]">
                   {activeModelTitle} ·{' '}
                   {summary
-                    ? `$${summary.latest.toFixed(2)} latest`
+                    ? `$${summary.latest?.toFixed(2)} latest`
                     : 'Live data pending'}
                 </p>
               </div>
