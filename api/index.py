@@ -81,7 +81,7 @@ PREPROCESSORS = {
 
 class BulkModelResponse(BaseModel):
   status: str
-  predictions: dict[str, List[float]]
+  predictions: dict[str, List[float] | List[Dict[str, float]]]
 
 @app.get("/api/predict", response_model=BulkModelResponse)
 def predict(opens: str, highs: str, lows: str, closes: str, volumes: str, adjCloses: str):
@@ -127,6 +127,10 @@ def predict(opens: str, highs: str, lows: str, closes: str, volumes: str, adjClo
         predictions_list = hybrid1.run(target_weights, ohlcv_list, selector, x_scaler, y_scaler, candidate_features, sequence_length, 3, 1) 
       case "Hybrid_QNN2":
         predictions_list = hybrid2.run(target_weights, ohlcv_list, selector, x_scaler, y_scaler, candidate_features, sequence_length, 3, 1)
+      case "Hybrid_QNN1_binary":
+        predictions_list = hybrid1.run_binary(target_weights, ohlcv_list, selector, x_scaler, candidate_features, sequence_length, 3, 1)
+      case "Hybrid_QNN2_binary":
+        predictions_list = hybrid2.run_binary(target_weights, ohlcv_list, selector, x_scaler, candidate_features, sequence_length, 3, 1)
 
     results[model_name] = predictions_list
 

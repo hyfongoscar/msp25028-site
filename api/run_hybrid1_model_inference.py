@@ -127,39 +127,177 @@ def run(
     q_layers: int
 ) -> list:
   df = pd.DataFrame(ohlcv_list)
-  df = canonicalize_ohlcv_columns(df)  
-  df = add_technical_indicators(df).dropna()
-
-  features_df = df[candidate_features].copy() if candidate_features else df.copy()
-
-  for column in candidate_features:
+  df = canonicalize_ohlcv_columns(df)
+  df = add_technical_indicators(df)
+  
+  features_df = df[candidate_features].copy()
+  for column in features_df.columns:
     values = features_df[column].to_numpy(dtype=np.float64)
     features_df[column] = pd.Series(values).rolling(window=WINDOW_DAYS, min_periods=1).mean().to_numpy(dtype=np.float64)
+      
+  X_scaled = x_scaler.transform(selector.transform(features_df))
+  
+  sequences = []
+  for i in range(len(X_scaled)):
+    if i >= sequence_length - 1:
+      window = X_scaled[i - sequence_length + 1 : i + 1]
+    else:
+      window = np.concatenate([np.repeat(X_scaled[0:1], sequence_length - i - 1, axis=0), X_scaled[0 : i + 1]], axis=0)
+    sequences.append(window)
+      
+  X_array = np.array(sequences, dtype=np.float32)
+  
+  batch_size, seq_len, n_feats = X_array.shape
+  hidden_size = 16
 
+  w_ih = weights_dict["extractor.lstm.weight_ih_l0"]
+  w_hh = weights_dict["extractor.lstm.weight_hh_l0"]
+  b_ih = weights_dict["extractor.lstm.bias_ih_l0"]
+  b_hh = weights_dict["extractor.lstm.bias_hh_l0"]
+  
+  w_proj = weights_dict["extractor.qubit_projection.weight"]
+  b_proj = weights_dict["extractor.qubit_projection.bias"]
+
+  qubit_features = []
+  
+  # Process sequence evaluation manually per sample batch element
+  for b in range(batch_size):
+    h = np.zeros(hidden_size, dtype=np.float32)
+    c = np.zeros(hidden_size, dtype=np.float32)
+    
+    for t in range(seq_len):
+      x_t = X_array[b, t, :] # [n_feats]
+      
+      # PyTorch LSTM Gate Math: i, f, g, o
+      gates = np.dot(w_ih, x_t) + b_ih + np.dot(w_hh, h) + b_hh
+      i = 1.0 / (1.0 + np.exp(-gates[0:hidden_size]))
+      f = 1.0 / (1.0 + np.exp(-gates[hidden_size:2*hidden_size]))
+      g = np.tanh(gates[2*hidden_size:3*hidden_size])
+      o = 1.0 / (1.0 + np.exp(-gates[3*hidden_size:4*hidden_size]))
+      
+      c = f * c + i * g
+      h = o * np.tanh(c)
+        
+    # Project the final hidden state layer
+    q_feat = np.dot(w_proj, h) + b_proj
+    qubit_features.append(q_feat)
+
+  qubit_features = np.array(qubit_features, dtype=np.float32)
+
+  dev = qml.device("default.qubit", wires=n_qubits)
+  @qml.qnode(dev, interface=None)
+  def pure_numpy_qnn_circuit(features, weights):
+    safe_features = np.tanh(features)
+    clipped = qml.math.clip(safe_features, -0.999999, 0.999999)
+    
+    for wire in range(n_qubits):
+      qml.RY(qml.math.arcsin(clipped[wire]), wires=wire)
+      qml.RZ(qml.math.arccos(clipped[wire]), wires=wire)
+
+    for layer in range(q_layers):
+      for wire in range(n_qubits):
+        qml.RY(weights[layer, wire, 0], wires=wire)
+        qml.RZ(weights[layer, wire, 1], wires=wire)
+      for wire in range(n_qubits - 1):
+        qml.CNOT(wires=[wire, wire + 1])
+        qml.CZ(wires=[wire, wire + 1])
+
+    return [qml.expval(qml.PauliZ(wire)) for wire in range(n_qubits)]
+
+  q_weights = weights_dict["q_weights"]
+  quantum_features = np.array([pure_numpy_qnn_circuit(sample, q_weights) for sample in qubit_features], dtype=np.float32)
+  
+  # Linear execution head mapping
+  w_head = weights_dict["output_head.weight"]
+  b_head = weights_dict["output_head.bias"]
+  predictions_scaled = np.dot(quantum_features, w_head.T) + b_head
+  
+  return y_scaler.inverse_transform(predictions_scaled.reshape(-1, 1)).flatten().tolist()
+
+
+def run_binary(
+    weights_dict: dict,
+    ohlcv_list: list, 
+    selector, 
+    x_scaler,
+    candidate_features: list,
+    sequence_length: int,
+    n_qubits: int,
+    q_layers: int
+) -> list:
+  df = pd.DataFrame(ohlcv_list)
+  df = canonicalize_ohlcv_columns(df)
+  df = add_technical_indicators(df)
+  
+  if len(df) == 0:
+      return []
+
+  # Clean data slice to prevent SettingWithCopy errors
+  features_df = df[candidate_features].copy() if candidate_features else df.copy()
+
+  # Apply rolling filter matching training pipeline specs
+  for column in features_df.columns:
+      values = features_df[column].to_numpy(dtype=np.float64)
+      features_df[column] = pd.Series(values).rolling(window=WINDOW_DAYS, min_periods=1).mean().to_numpy(dtype=np.float64)
+      
+  # Scale inputs sequentially
   selected_features_matrix = selector.transform(features_df)
   X_scaled = x_scaler.transform(selected_features_matrix)
   row_count = len(X_scaled)
- 
+  
+  # Reconstruct chronological temporal arrays
   sequences = []
   for i in range(row_count):
-      if i >= sequence_length - 1:
-          window = X_scaled[i - sequence_length + 1 : i + 1]
-      else:
-          padding_count = sequence_length - i - 1
-          padding = np.repeat(X_scaled[0:1], padding_count, axis=0)
-          window = np.concatenate([padding, X_scaled[0 : i + 1]], axis=0)
-      sequences.append(window)
+    if i >= sequence_length - 1:
+      window = X_scaled[i - sequence_length + 1 : i + 1]
+    else:
+      padding_count = sequence_length - i - 1
+      padding = np.repeat(X_scaled[0:1], padding_count, axis=0)
+      window = np.concatenate([padding, X_scaled[0 : i + 1]], axis=0)
+    sequences.append(window)
       
-  X_array = np.array(sequences, dtype=np.float32)
+  X_array = np.array(sequences, dtype=np.float32) # [Batch, Sequence, Features]
+  batch_size, seq_len, n_feats = X_array.shape
+  hidden_size = 16 
+  
+  # Extract structural LSTM parameters matching PyTorch gate layout order: i, f, g, o
+  w_ih = weights_dict["extractor.lstm.weight_ih_l0"] 
+  w_hh = weights_dict["extractor.lstm.weight_hh_l0"] 
+  b_ih = weights_dict["extractor.lstm.bias_ih_l0"]
+  b_hh = weights_dict["extractor.lstm.bias_hh_l0"]
+  
+  w_proj = weights_dict["extractor.qubit_projection.weight"] 
+  b_proj = weights_dict["extractor.qubit_projection.bias"]   
 
-  q_weights = weights_dict["q_weights"]
-  w_head = weights_dict["output_head.weight"]
-  b_head = weights_dict["output_head.bias"]
+  qubit_features = []
+  
+  # Propagate through sequential sequences element-by-element
+  for b in range(batch_size):
+    h = np.zeros(hidden_size, dtype=np.float32)
+    c = np.zeros(hidden_size, dtype=np.float32)
+    
+    for t in range(seq_len):
+      x_t = X_array[b, t, :]
+      gates = np.dot(w_ih, x_t) + b_ih + np.dot(w_hh, h) + b_hh
+      
+      i = 1.0 / (1.0 + np.exp(-gates[0:hidden_size]))
+      f = 1.0 / (1.0 + np.exp(-gates[hidden_size:2*hidden_size]))
+      g = np.tanh(gates[2*hidden_size:3*hidden_size])
+      o = 1.0 / (1.0 + np.exp(-gates[3*hidden_size:4*hidden_size]))
+      
+      c = f * c + i * g
+      h = o * np.tanh(c)
+        
+    q_feat = np.dot(w_proj, h) + b_proj
+    qubit_features.append(q_feat)
 
+  qubit_features = np.array(qubit_features, dtype=np.float32)
+
+  # Initialize Backend PennyLane Device context
   dev = qml.device("default.qubit", wires=n_qubits)
-
+  
   @qml.qnode(dev, interface=None)
-  def qnn_circuit(features, weights):
+  def pure_numpy_qnn_circuit(features, weights):
     clipped = qml.math.clip(features, -0.999999, 0.999999)
     for wire in range(n_qubits):
       qml.RY(qml.math.arcsin(clipped[wire]), wires=wire)
@@ -175,21 +313,23 @@ def run(
 
     return [qml.expval(qml.PauliZ(wire)) for wire in range(n_qubits)]
 
-  try:
-    qubit_features = forward_numpy_lstm(X_array, weights_dict)
-    quantum_features = []
-    for sample in qubit_features:
-      q_res = qnn_circuit(sample, q_weights)
-      quantum_features.append(q_res)
-        
-    q_features = np.array(quantum_features, dtype=np.float32) # [Batch, n_qubits]
-    
-    # 8. Classical Output Head Evaluation via Matrix Vector Multiplication
-    predictions_scaled = np.dot(q_features, w_head.T) + b_head
+  q_weights = weights_dict["q_weights"]
+  quantum_features = np.array([pure_numpy_qnn_circuit(sample, q_weights) for sample in qubit_features], dtype=np.float32)
+  
+  # Apply raw linear prediction head mappings to yield Logits
+  w_head = weights_dict["output_head.weight"]
+  b_head = weights_dict["output_head.bias"]
+  logits = np.dot(quantum_features, w_head.T) + b_head
+  
+  # CRITICAL FIX FOR BINARY CLASSIFIERS: Run outputs through standard Sigmoid function
+  probabilities = 1.0 / (1.0 + np.exp(-logits))
+  
+  prediction_results = []
+  for p in probabilities.flatten():
+    prob_val = float(p)
+    prediction_results.append({
+        "probability": prob_val,
+        "prediction": 1 if prob_val >= 0.5 else 0
+    })
       
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=f"Error running inference loop: {str(e)}")
-      
-  # 9. Reverse scaled forecasts back to true market dollar values
-  predictions_unscaled = y_scaler.inverse_transform(predictions_scaled).flatten().tolist()
-  return [float(p) for p in predictions_unscaled]
+  return prediction_results

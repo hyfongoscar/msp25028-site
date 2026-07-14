@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ChevronDown, Zap } from 'lucide-react';
 import {
+  Area,
   CartesianGrid,
+  ComposedChart,
   Legend,
   Line,
-  LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -36,6 +38,8 @@ const defaultPredictions: Record<string, PricePoint[]> = {
   custom_qnn: [],
   hybrid_qnn1: [],
   hybrid_qnn2: [],
+  hybrid_qnn1_binary: [],
+  hybrid_qnn2_binary: [],
 };
 
 export default function App() {
@@ -53,6 +57,11 @@ export default function App() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const [ran, setRan] = useState(false);
+
+  const isBinaryModel = useMemo(
+    () => activeModel.endsWith('_binary'),
+    [activeModel],
+  );
 
   const loadData = useCallback(async (symbol: string) => {
     setLoading(true);
@@ -90,21 +99,40 @@ export default function App() {
 
   const chartData = useMemo(() => {
     const predictions = predictedData[activeModel] || [];
+
     if (priceData.length === 0 || predictions.length !== priceData.length) {
-      return priceData.map(point => {
-        return { date: point.date, actual: point.close || 0, forecast: 0 };
-      });
-    }
-    return predictions.map((point, index) => {
-      return {
+      return priceData.map(point => ({
         date: point.date,
-        actual: point.price,
-        forecast: priceData[index].close,
+        actual: point.close || 0,
+        forecast: 0,
+        probability: isBinaryModel ? 50 : null,
+      }));
+    }
+
+    return predictions.map((point, index) => {
+      const actualPrice = priceData[index].close || 0;
+
+      return {
+        date: point.date || priceData[index].date,
+        actual: actualPrice,
+        forecast: point.price !== undefined ? point.price : null,
+        probability:
+          point.probability !== undefined ? point.probability * 100 : null,
       };
     });
-  }, [predictedData, activeModel, priceData]);
+  }, [predictedData, activeModel, priceData, isBinaryModel]);
 
-  console.log(chartData);
+  // Derived classification insights for quick dashboard reporting
+  const binaryStats = useMemo(() => {
+    if (!isBinaryModel || chartData.length === 0) return null;
+    const upSignals = chartData.filter(d => d.forecast === 1).length;
+    const downSignals = chartData.filter(d => d.forecast === 0).length;
+    const avgConfidence =
+      chartData.reduce((acc, curr) => acc + (curr.probability || 0), 0) /
+      chartData.length;
+
+    return { upSignals, downSignals, avgConfidence };
+  }, [chartData, isBinaryModel]);
 
   const handleRun = () => {
     setRunning(true);
@@ -217,15 +245,6 @@ export default function App() {
           <p className="m-0 text-[11px] leading-6 text-[#8892a4]">
             Pull the latest daily prices from Yahoo Finance and generate fresh
           </p>
-
-          <div className="mt-1 border-t border-white/10 pt-3.5">
-            <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.08em] text-[#8892a4]">
-              Active Model
-            </p>
-            <p className="m-0 text-[12px] font-semibold text-cyan-400">
-              {activeModelTitle}
-            </p>
-          </div>
         </aside>
 
         <div className="flex min-w-0 flex-col gap-4">
@@ -246,16 +265,43 @@ export default function App() {
             ))}
           </div>
 
+          {/* Classification Stats Overlay Section */}
+          {isBinaryModel && binaryStats && (
+            <div className="grid grid-cols-3 gap-4 rounded-xl border border-white/10 bg-[#1A1F2C] p-4 font-mono text-xs">
+              <div>
+                <span className="text-[#8892a4]">UP CALLS (▲):</span>
+                <span className="ml-2 font-bold text-emerald-400">
+                  {binaryStats.upSignals} days
+                </span>
+              </div>
+              <div>
+                <span className="text-[#8892a4]">DOWN CALLS (▼):</span>
+                <span className="ml-2 font-bold text-rose-400">
+                  {binaryStats.downSignals} days
+                </span>
+              </div>
+              <div>
+                <span className="text-[#8892a4]">AVG UP PROBABILITY:</span>
+                <span className="ml-2 font-bold text-cyan-400">
+                  {binaryStats.avgConfidence.toFixed(1)}%
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="flex-1 rounded-xl border border-white/10 bg-[#1A1F2C] p-5">
             <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
                 <p className="m-0 mb-0.5 text-[13px] font-semibold text-[#f0f2f5]">
-                  Price Forecast — {loadedStock}
+                  {isBinaryModel
+                    ? 'Directional Probability Matrix'
+                    : 'Price Forecast'}{' '}
+                  — {loadedStock}
                 </p>
                 <p className="m-0 text-[11px] text-[#8892a4]">
                   {activeModelTitle} ·{' '}
                   {summary
-                    ? `$${summary.latest?.toFixed(2)} latest`
+                    ? `$${summary.latest?.toFixed(2)} latest close`
                     : 'Live data pending'}
                 </p>
               </div>
@@ -265,8 +311,12 @@ export default function App() {
                   Actual Price
                 </span>
                 <span className="flex items-center gap-1.5 text-[11px] text-[#8892a4]">
-                  <span className="inline-block h-0.5 w-5 rounded-full bg-cyan-400" />
-                  Model Forecast
+                  <span
+                    className={`inline-block h-0.5 w-5 rounded-full ${isBinaryModel ? 'bg-cyan-500/40' : 'bg-cyan-400'}`}
+                  />
+                  {isBinaryModel
+                    ? 'Upward Trend Probability (%)'
+                    : 'Model Forecast'}
                 </span>
               </div>
             </div>
@@ -282,10 +332,22 @@ export default function App() {
             ) : (
               <>
                 <ResponsiveContainer height={300} width="100%">
-                  <LineChart
+                  <ComposedChart
                     data={chartData}
                     margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
                   >
+                    <defs>
+                      <linearGradient
+                        id="probGradient"
+                        x1="0"
+                        x2="0"
+                        y1="0"
+                        y2="1"
+                      >
+                        <stop offset="5%" stopColor={TEAL} stopOpacity={0.25} />
+                        <stop offset="95%" stopColor={TEAL} stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid
                       stroke="rgba(255,255,255,0.05)"
                       strokeDasharray="3 3"
@@ -301,11 +363,13 @@ export default function App() {
                       }}
                       tickLine={false}
                     />
+
+                    {/* Primary Left Y Axis for stock dollar asset tracking */}
                     <YAxis
                       axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
                       domain={['auto', 'auto']}
                       label={{
-                        value: 'Price (USD)',
+                        value: 'Asset Value (USD)',
                         angle: -90,
                         position: 'insideLeft',
                         offset: 12,
@@ -323,20 +387,58 @@ export default function App() {
                       tickFormatter={value => `$${value}`}
                       tickLine={false}
                       width={60}
+                      yAxisId="left"
                     />
+
+                    {/* Secondary Right Y Axis rendered strictly for Classification tasks */}
+                    {isBinaryModel && (
+                      <YAxis
+                        axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
+                        domain={[0, 100]}
+                        orientation="right"
+                        tick={{
+                          fill: '#8892a4',
+                          fontSize: 10,
+                          fontFamily: 'JetBrains Mono, monospace',
+                        }}
+                        tickFormatter={value => `${value}%`}
+                        width={45}
+                        yAxisId="right"
+                      />
+                    )}
+
                     <Tooltip
                       contentStyle={{
                         backgroundColor: '#222736',
                         border: '1px solid rgba(255,255,255,0.12)',
                         borderRadius: 12,
                       }}
-                      formatter={(value, name) => [
-                        `$${Number(value).toFixed(2)}`,
-                        name,
-                      ]}
+                      formatter={(value, name) => {
+                        if (name === 'Upward Probability')
+                          return [`${Number(value).toFixed(1)}%`, name];
+                        if (name === 'Directional Call')
+                          return [
+                            Number(value) === 1 ? 'UP (▲)' : 'DOWN (▼)',
+                            name,
+                          ];
+                        return [`$${Number(value).toFixed(2)}`, name];
+                      }}
                       labelStyle={{ color: '#f0f2f5' }}
                     />
+
                     <Legend wrapperStyle={{ display: 'none' }} />
+
+                    {/* Reference line marking the decision threshold at 50% */}
+                    {isBinaryModel && (
+                      <ReferenceLine
+                        stroke="rgba(255, 255, 255, 0.15)"
+                        strokeDasharray="4 4"
+                        y={50}
+                        yAxisId="right"
+                      />
+                    )}
+
+                    {/* Baseline Price Tracker */}
                     <Line
                       activeDot={{ r: 4, fill: '#fff' }}
                       dataKey="actual"
@@ -345,17 +447,45 @@ export default function App() {
                       stroke="rgba(255,255,255,0.7)"
                       strokeWidth={1.5}
                       type="monotone"
+                      yAxisId="left"
                     />
-                    <Line
-                      activeDot={{ r: 4, fill: TEAL }}
-                      dataKey="forecast"
-                      dot={false}
-                      name="Model Forecast"
-                      stroke={TEAL}
-                      strokeWidth={1.5}
-                      type="monotone"
-                    />
-                  </LineChart>
+
+                    {/* Conditional rendering depending on configuration state */}
+                    {isBinaryModel ? (
+                      <>
+                        <Area
+                          dataKey="probability"
+                          fill="url(#probGradient)"
+                          name="Upward Probability"
+                          opacity={1}
+                          stroke={TEAL}
+                          strokeWidth={1.5}
+                          type="monotone"
+                          yAxisId="right"
+                        />
+                        {/* Hidden property pass to deliver metrics into the tooltip pipeline */}
+                        <Line
+                          activeDot={false}
+                          dataKey="prediction"
+                          dot={false}
+                          name="Directional Call"
+                          stroke="transparent"
+                          yAxisId="right"
+                        />
+                      </>
+                    ) : (
+                      <Line
+                        activeDot={{ r: 4, fill: TEAL }}
+                        dataKey="forecast"
+                        dot={false}
+                        name="Model Forecast"
+                        stroke={TEAL}
+                        strokeWidth={1.5}
+                        type="monotone"
+                        yAxisId="left"
+                      />
+                    )}
+                  </ComposedChart>
                 </ResponsiveContainer>
 
                 <div className="mt-1 text-center">

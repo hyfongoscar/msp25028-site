@@ -11,6 +11,7 @@ export type StockPricePoint = {
 export type PricePoint = {
   date: string;
   price: number;
+  probability?: number;
 };
 
 export type StockSummary = {

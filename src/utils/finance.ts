@@ -1,3 +1,4 @@
+import { isNumber } from 'lodash-es';
 import type { ChartResultArray } from 'yahoo-finance2/modules/chart';
 
 import type {
@@ -22,14 +23,18 @@ async function fetchForecast(
   }
 
   const result = (await response.json()) as {
-    predictions: Record<string, number[]>;
+    predictions: Record<
+      string,
+      number[] | { probability: number; prediction: number }[]
+    >;
   };
 
   const formattedPredictions: Record<string, PricePoint[]> = {};
   for (const [model, predictions] of Object.entries(result.predictions)) {
     formattedPredictions[model.toLowerCase()] = predictions.map((p, i) => ({
       date: prices[i].date,
-      price: p,
+      price: isNumber(p) ? p : p.prediction,
+      probability: isNumber(p) ? undefined : p.probability,
     }));
   }
   return formattedPredictions;
