@@ -15,7 +15,7 @@ def clean_item(item):
     return [clean_item(v) for v in item]
   return item
 
-for model in ["qlstm", "custom_qnn", "hybrid_qnn1", "hybrid_qnn2"]:
+for model in ["hybrid_qnn1", "hybrid_qnn2", "hybrid_qnn1_binary", "hybrid_qnn2_binary"]:
   artifact = torch.load(CURRENT_DIR / "artifacts" / f"{model}.pt", map_location="cpu")
   state_dict = artifact["model_state_dict"] if "model_state_dict" in artifact else artifact['state_dict']
 

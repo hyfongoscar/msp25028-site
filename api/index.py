@@ -25,6 +25,8 @@ WEIGHTS = {
   "Custom_QNN": load_model_weights("custom_qnn_weights.npy"),
   "Hybrid_QNN1": load_model_weights("hybrid_qnn1_weights.npy"),
   "Hybrid_QNN2": load_model_weights("hybrid_qnn2_weights.npy"),
+  "Hybrid_QNN1_binary": load_model_weights("hybrid_qnn1_binary_weights.npy"),
+  "Hybrid_QNN2_binary": load_model_weights("hybrid_qnn2_binary_weights.npy"),
 }
 
 def load_preprocessor(preprocessor_file_name: str):
@@ -56,8 +58,8 @@ def load_preprocessor(preprocessor_file_name: str):
     print(f"Error loading preprocessor.joblib: {e}")
 
 PREPROCESSORS = {
-  "Hybrid_QNN1": load_preprocessor("hybrid_qnn1.joblib"),
-  "Hybrid_QNN2": load_preprocessor("hybrid_qnn2.joblib"),
+  "Hybrid_QNN": load_preprocessor("hybrid_qnn.joblib"),
+  "Hybrid_QNN_binary": load_preprocessor("hybrid_qnn_binary.joblib"),
 }
 
 def run_bulk_model_inference(state_dict: dict, raw_prices: list) -> list:
@@ -213,7 +215,7 @@ def run_hybrid_bulk_model_inference(
 
   # Extract raw target arrays and feature matrices matching training candidates
   # close_values = df["close"].to_numpy(dtype=np.float64)
-  features_df = df[candidate_features]
+  features_df = df[candidate_features] if candidate_features else df
     
   # 2. Apply the pre-fitted SelectKBest transformation and MinMaxScaler 
   # This maps your Open, High, Low, and engineered indicators down to the exact k features
@@ -310,10 +312,10 @@ def predict(opens: str, highs: str, lows: str, closes: str, volumes: str, adjClo
           "low": float(low),
           "close": float(close),
           "volume": float(volume),
-          "adjClose": float(adjClose)
+        #   "adjClose": float(adjClose)
         } for open, high, low, close, volume, adjClose in zip(cleaned_opens.split(","), cleaned_highs.split(","), cleaned_lows.split(","), cleaned_closes.split(","), cleaned_volumes.split(","), cleaned_adjCloses.split(","))
       ]
-      selector, x_scaler, y_scaler, candidate_features, sequence_length = PREPROCESSORS.get(model_name)
+      selector, x_scaler, y_scaler, candidate_features, sequence_length = PREPROCESSORS.get('Hybrid_QNN')
       predictions_list = run_hybrid_bulk_model_inference(target_weights, ohlcv_list, selector, x_scaler, y_scaler, candidate_features, sequence_length)
       results[model_name] = predictions_list
 

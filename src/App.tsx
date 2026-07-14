@@ -90,7 +90,6 @@ export default function App() {
 
   const chartData = useMemo(() => {
     const predictions = predictedData[activeModel] || [];
-    console.log(predictions.length, priceData.length);
     if (priceData.length === 0 || predictions.length !== priceData.length) {
       return priceData.map(point => {
         return { date: point.date, actual: point.close || 0, forecast: 0 };
