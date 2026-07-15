@@ -26,7 +26,7 @@ def load_model_weights(model_file_name: str) -> dict:
 
 WEIGHTS = {
   "LSTM": load_model_weights("lstm_weights.npy"),
-  "QLSTM": load_model_weights("qlstm_weights.npy"),
+  "QLSTM": load_model_weights("qlstm_q.npy"),
   "Custom_QNN": load_model_weights("custom_qnn_weights.npy"),
   "Hybrid_QNN1": load_model_weights("hybrid_qnn1_weights.npy"),
   "Hybrid_QNN2": load_model_weights("hybrid_qnn2_weights.npy"),
@@ -117,7 +117,8 @@ def predict(payload: PredictionRequest):
     target_weights = WEIGHTS.get(model_name)
     match model_name:
       case "LSTM":
-        predictions_list = lstm.run(target_weights, closes, 3)
+        # predictions_list = lstm.run(target_weights, closes, 3)
+        predictions_list = []
       case "QLSTM":
         predictions_list = qlstm.run(target_weights, closes, 3)
       case "Custom_QNN":

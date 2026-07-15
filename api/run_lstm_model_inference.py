@@ -21,6 +21,8 @@ def run(
   seq_len: int,
 ) -> List[float]:
   windows = get_sliding_windows(close_list, seq_len)
+
+  print(weights.keys())
   
   # 3. Retrieve weights (Standard PyTorch names exported to numpy)
   w_ih = weights["lstm.weight_ih_l0"]  # Shape: (4*H, F)
@@ -28,8 +30,8 @@ def run(
   b_ih = weights["lstm.bias_ih_l0"]    # Shape: (4*H,)
   b_hh = weights["lstm.bias_hh_l0"]    # Shape: (4*H,)
   
-  w_fc = weights["fc.weight"]          # Shape: (1, H)
-  b_fc = weights["fc.bias"]            # Shape: (1,)
+  w_fc = weights["linear.weight"]          # Shape: (1, H)
+  b_fc = weights["linear.bias"]            # Shape: (1,)
   
   hidden_size = w_hh.shape[1]
   predictions = []

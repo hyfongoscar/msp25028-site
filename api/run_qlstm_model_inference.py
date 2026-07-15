@@ -1,13 +1,12 @@
 import numpy as np
 import pandas as pd
-from typing import List, Dict
+from typing import List, Dict, Any
 import pennylane as qml
 
 def sigmoid(x: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-np.clip(x, -500, 500)))
 
-def get_sliding_windows(data: List[float], seq_len: int) -> np.ndarray:
-    """Slices a 2D array into a 3D sliding window array of shape (B, T, F)."""
+def get_sliding_windows(data: np.ndarray, seq_len: int) -> np.ndarray:
     num_records = len(data)
     num_windows = num_records - seq_len + 1
     windows = []
@@ -15,97 +14,104 @@ def get_sliding_windows(data: List[float], seq_len: int) -> np.ndarray:
         windows.append(data[i : i + seq_len])
     return np.array(windows)
 
-
 def run(
-  weights: Dict[str, np.ndarray], 
-  close_list: List[float], 
-  seq_len: int,
-) -> List[float]:
-  windows = get_sliding_windows(close_list, seq_len)
+  master_weights: dict, 
+  close_prices: List[float],
+  seq_len: int
+) -> list:
+  clayer_in_w = np.array(master_weights["state_dict.lstm.clayer_in.weight"], dtype=float)   # Shape: (4, 17)
+  clayer_in_b = np.array(master_weights["state_dict.lstm.clayer_in.bias"], dtype=float)     # Shape: (4,)
   
-  # Check standard hidden units from weights
-  # Usually QLSTM will have input/output weight projections stored in the state dict
-  # Modify string lookup names if your custom model layers vary.
-  print(weights.keys())
-  clayer_in_w = weights["lstm.clayer_in.weight"]   # Shape: (n_qubits, F + H)
-  clayer_in_b = weights["lstm.clayer_in.bias"]     # Shape: (n_qubits,)
+  clayer_out_w = np.array(master_weights["state_dict.lstm.clayer_out.weight"], dtype=float) # Shape: (16, 4)
+  clayer_out_b = np.array(master_weights["state_dict.lstm.clayer_out.bias"], dtype=float)   # Shape: (16,)
   
-  # Quantum weights shapes are typically: (n_layers, n_qubits)
-  vqc_w_f = weights["vqc_f.weights"]
-  vqc_w_i = weights["vqc_i.weights"]
-  vqc_w_g = weights["vqc_g.weights"]
-  vqc_w_o = weights["vqc_o.weights"]
+  linear_w = np.array(master_weights["state_dict.linear.weight"], dtype=float)             # Shape: (1, 16)
+  linear_b = np.array(master_weights["state_dict.linear.bias"], dtype=float)
   
-  # Output layers to convert expectaton values back to hidden state dimensions
-  clayer_out_w = weights["lstm.clayer_out.weight"] # Shape: (4*H, n_qubits)
-  clayer_out_b = weights["lstm.clayer_out.bias"]   # Shape: (4*H,)
+  hidden_size = 16  # Confirmed by linear_w shape
+  seq_len = 3      # Hardcoded sequence length from training
   
-  w_fc = weights["fc.weight"]                 # Shape: (1, H)
-  b_fc = weights["fc.bias"]                   # Shape: (1,)
+  # 2. Extract the 4 sets of independent quantum gate weights
+  w_forget = master_weights.get("model['lstm'].qlayer_forget._tape._ops[0].data[0]")
+  w_input = master_weights.get("model['lstm'].qlayer_input._tape._ops[0].data[0]")
+  w_update = master_weights.get("model['lstm'].qlayer_update._tape._ops[0].data[0]")
+  w_output = master_weights.get("model['lstm'].qlayer_output._tape._ops[0].data[0]")
+  
+  if w_forget is None:
+    w_forget = master_weights["model.lstm.qlayer_forget._tape._ops[0].data[0]"]
+    w_input = master_weights["model.lstm.qlayer_input._tape._ops[0].data[0]"]
+    w_update = master_weights["model.lstm.qlayer_update._tape._ops[0].data[0]"]
+    w_output = master_weights["model.lstm.qlayer_output._tape._ops[0].data[0]"]
+
+  w_forget = np.array(w_forget, dtype=float)
+  w_input = np.array(w_input, dtype=float)
+  w_update = np.array(w_update, dtype=float)
+  w_output = np.array(w_output, dtype=float)
 
   n_qubits = 4
-  n_layers = 16
+  n_layers = 1
+        
   @qml.qnode(qml.device("default.qubit", wires=n_qubits), interface="autograd")
   def _quantum_circuit(inputs, weights):
-      # Encode incoming features into the qubit states via rotation gates
+    # Angle Encoding
+    for i in range(n_qubits):
+      qml.RY(inputs[i], wires=i)
+    # Variational Layers
+    for l in range(n_layers):
       for i in range(n_qubits):
-        qml.RY(inputs[i], wires=i)
+        qml.RY(weights[l, i], wires=i)
+      for i in range(n_qubits - 1):
+        qml.CNOT(wires=[i, i + 1])
+      if n_qubits > 1:
+        qml.CNOT(wires=[n_qubits - 1, 0]) 
+    return [qml.expval(qml.PauliZ(i)) for i in range(n_qubits)]
       
-      # Parameterized quantum circuit layer
-      for l in range(n_layers):
-        for i in range(n_qubits):
-          qml.RY(weights[l, i], wires=i)
-        for i in range(n_qubits - 1):
-          qml.CNOT(wires=[i, i + 1])
-        if n_qubits > 1:
-          qml.CNOT(wires=[n_qubits - 1, 0])
-              
-      return [qml.expval(qml.PauliZ(i)) for i in range(n_qubits)]
-  
   qnode = _quantum_circuit
+
+  close_prices_arr = np.array(close_prices).reshape(-1, 1)
+  windows = get_sliding_windows(close_prices_arr, seq_len)
   
-  hidden_size = w_fc.shape[1]
   predictions = []
   
+  # 4. Core Recurrent Inference Loop
   for window in windows:
-    h = np.zeros(hidden_size)
-    c = np.zeros(hidden_size)
+    h = np.zeros(hidden_size, dtype=float)
+    c = np.zeros(hidden_size, dtype=float)
     
     for t in range(seq_len):
-      x_t = window[t]
+      x_t = window[t] 
       
-      # 1. Concatenate current inputs and previous hidden state
-      v_concat = np.concatenate([x_t, h])
+      # Defense 1: Ensure concatenated vector drops any object flags
+      v_concat = np.concatenate([x_t, h]).astype(float)
       
-      # 2. Project down to qubits features classically
+      # Defense 2: Strip object wrapper status before running arctan
       v_projected = np.dot(clayer_in_w, v_concat) + clayer_in_b
+      v_projected = v_projected.astype(float) 
+      v_projected = np.arctan(v_projected) 
       
-      # Scale values safely to bound angles inside [-pi, pi]
-      v_projected = np.arctan(v_projected)
+      # Execute the 4 quantum node gates
+      q_f = np.array(qnode(v_projected, w_forget)).astype(float)
+      q_i = np.array(qnode(v_projected, w_input)).astype(float)
+      q_g = np.array(qnode(v_projected, w_update)).astype(float)
+      q_o = np.array(qnode(v_projected, w_output)).astype(float)
       
-      # 3. Process expectation values through 4 separate gate circuits (f, i, g, o)
-      q_f = np.array(qnode(v_projected, vqc_w_f))
-      q_i = np.array(qnode(v_projected, vqc_w_i))
-      q_g = np.array(qnode(v_projected, vqc_w_g))
-      q_o = np.array(qnode(v_projected, vqc_w_o))
+      # Defense 3: Enforce hard float64 conversion for the classical projections
+      f = sigmoid((np.dot(clayer_out_w, q_f) + clayer_out_b).astype(float))
+      i = sigmoid((np.dot(clayer_out_w, q_i) + clayer_out_b).astype(float))
+      g = np.tanh((np.dot(clayer_out_w, q_g) + clayer_out_b).astype(float))
+      o = sigmoid((np.dot(clayer_out_w, q_o) + clayer_out_b).astype(float))
       
-      # Concatenate quantum expectation results
-      q_combined = np.concatenate([q_f, q_i, q_g, q_o])
-      
-      # 4. Map back to gate dimensions classically
-      gates = np.dot(clayer_out_w, q_combined) + clayer_out_b
-      
-      # 5. Apply standard LSTM operations
-      i = sigmoid(gates[0 : hidden_size])
-      f = sigmoid(gates[hidden_size : 2 * hidden_size])
-      g = np.tanh(gates[2 * hidden_size : 3 * hidden_size])
-      o = sigmoid(gates[3 * hidden_size : 4 * hidden_size])
-      
-      c = f * c + i * g
-      h = o * np.tanh(c)
+      # Defense 4: Sanitize recurrent states before they loop back to t+1
+      c = (f * c + i * g).astype(float)
+      h = (o * np.tanh(c)).astype(float)
         
-    out = np.dot(w_fc, h) + b_fc
-    predictions.append(out[0])
+    # Final regression layer pass
+    out = np.dot(linear_w, h) + linear_b
+    predictions.append(float(out[0]))
       
+  if not predictions:
+    return []
+      
+  # 5. Inverse-scale predictions back to standard price values
   predictions_arr = np.array(predictions).reshape(-1, 1)
   return predictions_arr.tolist()

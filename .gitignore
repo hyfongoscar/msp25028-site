@@ -24,6 +24,6 @@ dist-ssr
 .env
 .env.prod
 
-api/__pycache__/
+api/__pycache__/*
 api/.venv
 api/artifacts/*.pt
