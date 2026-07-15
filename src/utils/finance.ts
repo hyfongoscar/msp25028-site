@@ -15,9 +15,13 @@ const apiBaseUrl = configuredApiBaseUrl
 async function fetchForecast(
   prices: StockPricePoint[],
 ): Promise<Record<string, PricePoint[]>> {
-  const response = await fetch(
-    `${apiBaseUrl.replace(/\/$/, '')}/predict?opens=[${prices.map(s => s.open).join(',')}]&highs=[${prices.map(s => s.high).join(',')}]&lows=[${prices.map(s => s.low).join(',')}]&closes=[${prices.map(s => s.close).join(',')}]&volumes=[${prices.map(s => s.volume).join(',')}]&adjCloses=[${prices.map(s => s.adjClose).join(',')}]`,
-  );
+  const response = await fetch(`${apiBaseUrl.replace(/\/$/, '')}/predict`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ prices }),
+  });
   if (!response.ok) {
     throw new Error('Unable to reach the predict endpoint right now.');
   }

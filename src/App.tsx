@@ -24,16 +24,24 @@ import { TEAL } from './utils/colors';
 import { fetchForecast, fetchStockData } from './utils/finance';
 import MODELS from './utils/models';
 
-const STOCKS = [
-  { label: 'AAPL (Apple Inc.)', value: 'AAPL' },
-  { label: 'TSLA (Tesla, Inc.)', value: 'TSLA' },
-  { label: 'MSFT (Microsoft Corp.)', value: 'MSFT' },
-  { label: 'AMZN (Amazon.com Inc.)', value: 'AMZN' },
-  { label: 'NVDA (NVIDIA Corp.)', value: 'NVDA' },
-  { label: 'GOOGL (Alphabet Inc.)', value: 'GOOGL' },
+// Expanded Asset Directory categorized by class
+const ASSETS = [
+  // Equities
+  { label: 'AAPL (Apple Inc.)', value: 'AAPL', group: 'Stocks' },
+  { label: 'TSLA (Tesla, Inc.)', value: 'TSLA', group: 'Stocks' },
+  { label: 'MSFT (Microsoft Corp.)', value: 'MSFT', group: 'Stocks' },
+  { label: 'AMZN (Amazon.com Inc.)', value: 'AMZN', group: 'Stocks' },
+  { label: 'NVDA (NVIDIA Corp.)', value: 'NVDA', group: 'Stocks' },
+  { label: 'GOOGL (Alphabet Inc.)', value: 'GOOGL', group: 'Stocks' },
+  // Cryptocurrencies (yfinance format)
+  { label: 'BTC-USD (Bitcoin)', value: 'BTC-USD', group: 'Crypto' },
+  { label: 'ETH-USD (Ethereum)', value: 'ETH-USD', group: 'Crypto' },
+  { label: 'SOL-USD (Solana)', value: 'SOL-USD', group: 'Crypto' },
+  { label: 'XRP-USD (Ripple)', value: 'XRP-USD', group: 'Crypto' },
 ];
 
 const defaultPredictions: Record<string, PricePoint[]> = {
+  lstm: [],
   qlstm: [],
   custom_qnn: [],
   hybrid_qnn1: [],
@@ -43,10 +51,10 @@ const defaultPredictions: Record<string, PricePoint[]> = {
 };
 
 export default function App() {
-  const [selectedStock, setSelectedStock] = useState('AAPL');
-  const [activeModel, setActiveModel] = useState('qlstm');
+  const [selectedAsset, setSelectedAsset] = useState('AAPL');
+  const [activeModel, setActiveModel] = useState('lstm');
 
-  const [loadedStock, setLoadedStock] = useState<string | null>(null);
+  const [loadedAsset, setLoadedAsset] = useState<string | null>(null);
   const [priceData, setPriceData] = useState<StockPricePoint[]>([]);
   const [predictedData, setPredictedData] = useState(defaultPredictions);
   const [summary, setSummary] = useState<StockSummary | null>(null);
@@ -58,6 +66,7 @@ export default function App() {
   const [running, setRunning] = useState(false);
   const [ran, setRan] = useState(false);
 
+  // Check if current view is a classification variant
   const isBinaryModel = useMemo(
     () => activeModel.endsWith('_binary'),
     [activeModel],
@@ -71,18 +80,18 @@ export default function App() {
     try {
       const result = await fetchStockData(symbol);
       const predictions = await fetchForecast(result.points);
-      setLoadedStock(symbol);
+      setLoadedAsset(symbol);
       setPriceData(result.points);
       setPredictedData(predictions);
       setSummary(result.summary);
       setRan(true);
     } catch (err) {
-      setLoadedStock(null);
+      setLoadedAsset(null);
       setPriceData([]);
       setPredictedData(defaultPredictions);
       setSummary(null);
       setError(
-        err instanceof Error ? err.message : 'Unable to load stock data.',
+        err instanceof Error ? err.message : 'Unable to load asset data.',
       );
       setRan(false);
     } finally {
@@ -99,18 +108,22 @@ export default function App() {
 
   const chartData = useMemo(() => {
     const predictions = predictedData[activeModel] || [];
+    const validPriceData = priceData.filter(point => !!point.close);
 
-    if (priceData.length === 0 || predictions.length !== priceData.length) {
-      return priceData.map(point => ({
+    if (
+      validPriceData.length === 0 ||
+      predictions.length !== validPriceData.length
+    ) {
+      return validPriceData.map(point => ({
         date: point.date,
-        actual: point.close || 0,
+        actual: point.close,
         forecast: 0,
         probability: isBinaryModel ? 50 : null,
       }));
     }
 
     return predictions.map((point, index) => {
-      const actualPrice = priceData[index].close || 0;
+      const actualPrice = priceData[index].close;
 
       return {
         date: point.date || priceData[index].date,
@@ -136,11 +149,11 @@ export default function App() {
 
   const handleRun = () => {
     setRunning(true);
-    void loadData(selectedStock);
+    void loadData(selectedAsset);
   };
 
   const selectedLabel =
-    STOCKS.find(s => s.value === selectedStock)?.label ?? selectedStock;
+    ASSETS.find(s => s.value === selectedAsset)?.label ?? selectedAsset;
   const serviceState = loading
     ? 'Loading live market data...'
     : error
@@ -206,17 +219,38 @@ export default function App() {
             </button>
 
             {dropdownOpen && (
-              <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 overflow-hidden rounded-lg border border-white/10 bg-[#222736] shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
-                {STOCKS.map(stock => (
+              <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 max-h-72 overflow-y-auto rounded-lg border border-white/10 bg-[#222736] shadow-[0_8px_24px_rgba(0,0,0,0.4)] scrollbar-thin scrollbar-thumb-white/10">
+                {/* Equities Category */}
+                <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8892a4] border-b border-white/5 bg-[#1e2230]">
+                  Equities
+                </div>
+                {ASSETS.filter(asset => asset.group === 'Stocks').map(asset => (
                   <button
-                    className={`block w-full px-3 py-2.5 text-left text-[13px] ${stock.value === selectedStock ? 'bg-cyan-400/10 text-cyan-400' : 'text-[#f0f2f5] hover:bg-white/5'}`}
-                    key={stock.value}
+                    className={`block w-full px-3 py-2 text-left text-[13px] ${asset.value === selectedAsset ? 'bg-cyan-400/10 text-cyan-400 font-medium' : 'text-[#f0f2f5] hover:bg-white/5'}`}
+                    key={asset.value}
                     onClick={() => {
-                      setSelectedStock(stock.value);
+                      setSelectedAsset(asset.value);
                       setDropdownOpen(false);
                     }}
                   >
-                    {stock.label}
+                    {asset.label}
+                  </button>
+                ))}
+
+                {/* Crypto Category */}
+                <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8892a4] border-t border-b border-white/5 bg-[#1e2230]">
+                  Cryptocurrencies
+                </div>
+                {ASSETS.filter(asset => asset.group === 'Crypto').map(asset => (
+                  <button
+                    className={`block w-full px-3 py-2 text-left text-[13px] ${asset.value === selectedAsset ? 'bg-cyan-400/10 text-cyan-400 font-medium' : 'text-[#f0f2f5] hover:bg-white/5'}`}
+                    key={asset.value}
+                    onClick={() => {
+                      setSelectedAsset(asset.value);
+                      setDropdownOpen(false);
+                    }}
+                  >
+                    {asset.label}
                   </button>
                 ))}
               </div>
@@ -243,7 +277,8 @@ export default function App() {
           )}
 
           <p className="m-0 text-[11px] leading-6 text-[#8892a4]">
-            Pull the latest daily prices from Yahoo Finance and generate fresh
+            Pull the latest daily prices from Yahoo Finance and generate
+            predictions.
           </p>
         </aside>
 
@@ -254,7 +289,7 @@ export default function App() {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="grid grid-cols-4 gap-3">
             {MODELS.map(model => (
               <ModelCard
                 active={activeModel === model.id}
@@ -296,12 +331,12 @@ export default function App() {
                   {isBinaryModel
                     ? 'Directional Probability Matrix'
                     : 'Price Forecast'}{' '}
-                  — {loadedStock}
+                  — {loadedAsset}
                 </p>
                 <p className="m-0 text-[11px] text-[#8892a4]">
                   {activeModelTitle} ·{' '}
                   {summary
-                    ? `$${summary.latest?.toFixed(2)} latest close`
+                    ? `$${summary.latest?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} latest close`
                     : 'Live data pending'}
                 </p>
               </div>
@@ -364,7 +399,7 @@ export default function App() {
                       tickLine={false}
                     />
 
-                    {/* Primary Left Y Axis for stock dollar asset tracking */}
+                    {/* Primary Left Y Axis for asset dollar value tracking */}
                     <YAxis
                       axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
                       domain={['auto', 'auto']}
@@ -384,9 +419,11 @@ export default function App() {
                         fontSize: 10,
                         fontFamily: 'JetBrains Mono, monospace',
                       }}
-                      tickFormatter={value => `$${value}`}
+                      tickFormatter={value =>
+                        `$${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                      }
                       tickLine={false}
-                      width={60}
+                      width={65}
                       yAxisId="left"
                     />
 
@@ -421,7 +458,10 @@ export default function App() {
                             Number(value) === 1 ? 'UP (▲)' : 'DOWN (▼)',
                             name,
                           ];
-                        return [`$${Number(value).toFixed(2)}`, name];
+                        return [
+                          `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                          name,
+                        ];
                       }}
                       labelStyle={{ color: '#f0f2f5' }}
                     />
@@ -450,7 +490,7 @@ export default function App() {
                       yAxisId="left"
                     />
 
-                    {/* Conditional rendering depending on configuration state */}
+                    {/* Conditional rendering depending on model state */}
                     {isBinaryModel ? (
                       <>
                         <Area

@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "install-all": "pnpm install && pip install -r api/requirements.txt",
     "dev:frontend": "vite",
     "dev:backend": "python -m uvicorn api.index:app --reload --port 8000",
     "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
