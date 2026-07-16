@@ -218,8 +218,8 @@ class QShallowRegressionLSTM(nn.Module):
 
         return out
 
-for model in ["qlstm"]:
-  checkpoint = torch.load(CURRENT_DIR / "artifacts" / f"{model}.pt", map_location="cpu")
+for model_name in []:
+  checkpoint = torch.load(CURRENT_DIR / "artifacts" / f"{model_name}.pt", map_location="cpu", weights_only=False)
 
   model = QShallowRegressionLSTM(
       num_sensors=1,
@@ -248,10 +248,21 @@ for model in ["qlstm"]:
   print(weights_dict_np.keys())
 
   # 5. Save the dictionary as a single .npy file
-  save_path = 'qlstm_weights_epoch_50.npy'
-  np.save(CURRENT_DIR / "weights" / f"{model}_weights.npy", weights_dict_np, allow_pickle=True)
+  save_path = CURRENT_DIR / "weights" / f"{model_name}_weights.npy"
+  np.save(save_path, weights_dict_np, allow_pickle=True)
   print(f"Weights successfully saved to {save_path}")
 
+for model in ['custom_qnn']:
+  state_dict = torch.load(CURRENT_DIR / "artifacts" / f"{model}.pt", map_location="cpu")
+
+  cleaned_weights = {}
+
+  for key, value in state_dict.items():
+      cleaned_weights[key] = clean_item(value)
+
+  # 3. Save it back out over the old file
+  np.save(CURRENT_DIR / "weights" / f"{model}_weights.npy", cleaned_weights, allow_pickle=True)
+  print(f"Cleaned weights file successfully generated for {model} model!")
 
 for model in []:
   artifact = torch.load(CURRENT_DIR / "artifacts" / f"{model}.pt", map_location="cpu")

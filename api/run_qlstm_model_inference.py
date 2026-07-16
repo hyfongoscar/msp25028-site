@@ -6,6 +6,13 @@ import pennylane as qml
 def sigmoid(x: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-x))
 
+def normalize(a, min_a=None, max_a=None):
+    min_a, max_a = np.min(a, axis=0), np.max(a, axis=0)
+    return (a - min_a) / (max_a - min_a + 0.0001), min_a, max_a
+
+def undo_normalize(a, min_a, max_a):
+    return a * (max_a - min_a + 0.0001) + min_a
+
 def get_sliding_windows(data: np.ndarray, seq_len: int) -> np.ndarray:
     windows = []
     for i in range(len(data)):
@@ -15,13 +22,6 @@ def get_sliding_windows(data: np.ndarray, seq_len: int) -> np.ndarray:
         else:
           windows.append(data[i - seq_len + 1: i + 1])
     return np.array(windows)
-
-def normalize(a, min_a=None, max_a=None):
-    min_a, max_a = np.min(a, axis=0), np.max(a, axis=0)
-    return (a - min_a) / (max_a - min_a + 0.0001), min_a, max_a
-
-def undo_normalize(a, min_a, max_a):
-    return a * (max_a - min_a + 0.0001) + min_a
 
 def run(
   master_weights: dict, 
@@ -57,8 +57,8 @@ def run(
   def _quantum_circuit(inputs, weights):
     for i in range(n_qubits):
       qml.Hadamard(wires=i) 
-      qml.RY(inputs[i], wires=i)
-      qml.RZ(inputs[i]**2, wires=i)
+      qml.RY(np.arctan(inputs[i]), wires=i)
+      qml.RZ(np.arctan(inputs[i]**2), wires=i)
   
     for l in range(n_layers):
       for i in range(1, 3):
@@ -97,7 +97,6 @@ def run(
       # Defense 1: Ensure concatenated vector drops any object flags
       v_t = np.concatenate([h_t, x_t]).astype(float)
       
-      # Defense 2: Strip object wrapper status before running arctan
       y_t = np.dot(clayer_in_w, v_t) + clayer_in_b
       y_t = y_t.astype(float) 
       

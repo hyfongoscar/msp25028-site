@@ -110,6 +110,7 @@ export default function App() {
     const predictions = predictedData[activeModel] || [];
     const validPriceData = priceData.filter(point => !!point.close);
 
+    console.log(predictions, validPriceData);
     if (
       validPriceData.length === 0 ||
       predictions.length !== validPriceData.length

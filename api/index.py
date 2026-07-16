@@ -9,6 +9,7 @@ import joblib
 
 import api.run_lstm_model_inference as lstm
 import api.run_qlstm_model_inference as qlstm
+import api.run_custom_model_inference as custom
 import api.run_hybrid1_model_inference as hybrid1
 import api.run_hybrid2_model_inference as hybrid2
 
@@ -77,6 +78,7 @@ def load_preprocessor(preprocessor_file_name: str):
     print(f"Error loading preprocessor.joblib: {e}")
 
 PREPROCESSORS = {
+  "Custom_QNN": load_preprocessor("custom_qnn.joblib"),
   "Hybrid_QNN": load_preprocessor("hybrid_qnn.joblib"),
   "Hybrid_QNN_binary": load_preprocessor("hybrid_qnn_binary.joblib"),
 }
@@ -100,8 +102,9 @@ class BulkModelResponse(BaseModel):
 
 @app.post("/api/predict", response_model=BulkModelResponse)
 def predict(payload: PredictionRequest):
-  n_records = len(payload.prices)
-
+  clean_list = [p for p in payload.prices if p.close is not None]
+  n_records = len(clean_list)
+  
   SEQUENCE_LENGTH = 5
   if n_records < SEQUENCE_LENGTH:
       raise HTTPException(
@@ -109,7 +112,7 @@ def predict(payload: PredictionRequest):
           detail=f"Insufficient context. Minimum required length is {SEQUENCE_LENGTH}."
       )
   
-  closes = [price.close for price in payload.prices]
+  closes = [price.close for price in clean_list]
   ohlcv_list = [
     {
       "open": price.open, 
@@ -117,9 +120,12 @@ def predict(payload: PredictionRequest):
       "low": price.low, 
       "close": price.close, 
       "volume": price.volume
-    } for price in payload.prices
+    } for price in clean_list
   ]
-  selector, x_scaler, y_scaler, selected_features, candidate_features, lookback, feature_range, sequence_length = PREPROCESSORS.get('Hybrid_QNN')
+
+  custom_preprocessor = PREPROCESSORS.get('Custom_QNN')
+  hybrid_preprocessor = PREPROCESSORS.get('Hybrid_QNN')
+  hybrid_preprocessor_binary = PREPROCESSORS.get('Hybrid_QNN_binary')
 
   results = {}
   for model_name in WEIGHTS.keys():
@@ -130,16 +136,20 @@ def predict(payload: PredictionRequest):
       case "qlstm":
         predictions_list = qlstm.run(target_weights, closes, 3)
       case "custom_qnn":
-        predictions_list = []
-        # predictions_list = qlstm.run(target_weights, closes, SEQUENCE_LENGTH)
+        selector, x_scaler, y_scaler, selected_features, candidate_features, lookback, feature_range, sequence_length = custom_preprocessor
+        predictions_list = custom.run(target_weights, ohlcv_list, selector, x_scaler, y_scaler, candidate_features, sequence_length) 
       case "hybrid_qnn1":
-        predictions_list = hybrid1.run(target_weights, ohlcv_list, selector, x_scaler, y_scaler, candidate_features, sequence_length, 3, 1) 
+        selector, x_scaler, y_scaler, selected_features, candidate_features, lookback, feature_range, sequence_length = hybrid_preprocessor
+        predictions_list = hybrid1.run(target_weights, ohlcv_list, selector, x_scaler, y_scaler, candidate_features, 5, 3, 1) 
       case "hybrid_qnn2":
-        predictions_list = hybrid2.run(target_weights, ohlcv_list, selector, x_scaler, y_scaler, candidate_features, sequence_length, 3, 1)
+        selector, x_scaler, y_scaler, selected_features, candidate_features, lookback, feature_range, sequence_length = hybrid_preprocessor
+        predictions_list = hybrid2.run(target_weights, ohlcv_list, selector, x_scaler, y_scaler, candidate_features, 5, 3, 1)
       case "hybrid_qnn1_binary":
-        predictions_list = hybrid1.run_binary(target_weights, ohlcv_list, selector, x_scaler, candidate_features, sequence_length, 3, 1)
+        selector, x_scaler, y_scaler, selected_features, candidate_features, lookback, feature_range, sequence_length = hybrid_preprocessor_binary
+        predictions_list = hybrid1.run_binary(target_weights, ohlcv_list, selector, x_scaler, candidate_features, 5, 3, 1)
       case "hybrid_qnn2_binary":
-        predictions_list = hybrid2.run_binary(target_weights, ohlcv_list, selector, x_scaler, candidate_features, sequence_length, 3, 1)
+        selector, x_scaler, y_scaler, selected_features, candidate_features, lookback, feature_range, sequence_length = hybrid_preprocessor_binary
+        predictions_list = hybrid2.run_binary(target_weights, ohlcv_list, selector, x_scaler, candidate_features, 5, 3, 1)
 
     results[model_name] = predictions_list
 

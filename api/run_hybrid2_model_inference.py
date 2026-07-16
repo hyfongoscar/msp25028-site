@@ -217,6 +217,7 @@ def run_binary(
   flattened_inputs = X_array.reshape(batch_size, -1) 
   q_proj_w = weights_dict["quantum_projection.weight"]
   q_proj_b = weights_dict["quantum_projection.bias"]
+  print(flattened_inputs.shape, q_proj_w.shape, q_proj_b.shape)
   quantum_inputs = np.tanh(np.dot(flattened_inputs, q_proj_w.T) + q_proj_b)
 
   # 3. PennyLane execution circuit node loop
