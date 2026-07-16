@@ -25,13 +25,13 @@ def load_model_weights(model_file_name: str) -> dict:
   return np.load(file_path, allow_pickle=True).item()
 
 WEIGHTS = {
-  "LSTM": load_model_weights("lstm_weights.npy"),
-  "QLSTM": load_model_weights("qlstm_q.npy"),
-  "Custom_QNN": load_model_weights("custom_qnn_weights.npy"),
-  "Hybrid_QNN1": load_model_weights("hybrid_qnn1_weights.npy"),
-  "Hybrid_QNN2": load_model_weights("hybrid_qnn2_weights.npy"),
-  "Hybrid_QNN1_binary": load_model_weights("hybrid_qnn1_binary_weights.npy"),
-  "Hybrid_QNN2_binary": load_model_weights("hybrid_qnn2_binary_weights.npy"),
+  "lstm": load_model_weights("lstm_weights.npy"),
+  "qlstm": load_model_weights("qlstm_weights.npy"),
+  "custom_qnn": load_model_weights("custom_qnn_weights.npy"),
+  "hybrid_qnn1": load_model_weights("hybrid_qnn1_weights.npy"),
+  "hybrid_qnn2": load_model_weights("hybrid_qnn2_weights.npy"),
+  "hybrid_qnn1_binary": load_model_weights("hybrid_qnn1_binary_weights.npy"),
+  "hybrid_qnn2_binary": load_model_weights("hybrid_qnn2_binary_weights.npy"),
 }
 
 def load_preprocessor(preprocessor_file_name: str):
@@ -125,21 +125,20 @@ def predict(payload: PredictionRequest):
   for model_name in WEIGHTS.keys():
     target_weights = WEIGHTS.get(model_name)
     match model_name:
-      case "LSTM":
-        # predictions_list = lstm.run(target_weights, closes, 3)
-        predictions_list = []
-      case "QLSTM":
+      case "lstm":
+        predictions_list = lstm.run(target_weights, closes, 3)
+      case "qlstm":
         predictions_list = qlstm.run(target_weights, closes, 3)
-      case "Custom_QNN":
+      case "custom_qnn":
         predictions_list = []
         # predictions_list = qlstm.run(target_weights, closes, SEQUENCE_LENGTH)
-      case "Hybrid_QNN1":
+      case "hybrid_qnn1":
         predictions_list = hybrid1.run(target_weights, ohlcv_list, selector, x_scaler, y_scaler, candidate_features, sequence_length, 3, 1) 
-      case "Hybrid_QNN2":
+      case "hybrid_qnn2":
         predictions_list = hybrid2.run(target_weights, ohlcv_list, selector, x_scaler, y_scaler, candidate_features, sequence_length, 3, 1)
-      case "Hybrid_QNN1_binary":
+      case "hybrid_qnn1_binary":
         predictions_list = hybrid1.run_binary(target_weights, ohlcv_list, selector, x_scaler, candidate_features, sequence_length, 3, 1)
-      case "Hybrid_QNN2_binary":
+      case "hybrid_qnn2_binary":
         predictions_list = hybrid2.run_binary(target_weights, ohlcv_list, selector, x_scaler, candidate_features, sequence_length, 3, 1)
 
     results[model_name] = predictions_list
