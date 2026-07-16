@@ -113,5 +113,5 @@ def run(
     return []
       
   # 5. Inverse-scale predictions back to standard price values
-  predictions_arr = np.array(predictions).reshape(-1, 1)
+  predictions_arr = np.array(predictions).reshape(-1)
   return predictions_arr.tolist()

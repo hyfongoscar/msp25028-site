@@ -8,7 +8,6 @@ WINDOW_DAYS = 10
 
 def canonicalize_ohlcv_columns(frame: pd.DataFrame) -> pd.DataFrame:
     """Normalize case variants such as `Close` and `Volume` to lower case."""
-
     if isinstance(frame.columns, pd.MultiIndex):
         frame = frame.copy()
         frame.columns = [str(column[0]) for column in frame.columns]

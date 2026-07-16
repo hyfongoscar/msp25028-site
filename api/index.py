@@ -110,6 +110,15 @@ def predict(payload: PredictionRequest):
       )
   
   closes = [price.close for price in payload.prices]
+  ohlcv_list = [
+    {
+      "open": price.open, 
+      "high": price.high, 
+      "low": price.low, 
+      "close": price.close, 
+      "volume": price.volume
+    } for price in payload.prices
+  ]
   selector, x_scaler, y_scaler, selected_features, candidate_features, lookback, feature_range, sequence_length = PREPROCESSORS.get('Hybrid_QNN')
 
   results = {}
@@ -122,15 +131,16 @@ def predict(payload: PredictionRequest):
       case "QLSTM":
         predictions_list = qlstm.run(target_weights, closes, 3)
       case "Custom_QNN":
-        predictions_list = qlstm.run(target_weights, closes, SEQUENCE_LENGTH)
+        predictions_list = []
+        # predictions_list = qlstm.run(target_weights, closes, SEQUENCE_LENGTH)
       case "Hybrid_QNN1":
-        predictions_list = hybrid1.run(target_weights, payload.prices, selector, x_scaler, y_scaler, candidate_features, sequence_length, 3, 1) 
+        predictions_list = hybrid1.run(target_weights, ohlcv_list, selector, x_scaler, y_scaler, candidate_features, sequence_length, 3, 1) 
       case "Hybrid_QNN2":
-        predictions_list = hybrid2.run(target_weights, payload.prices, selector, x_scaler, y_scaler, candidate_features, sequence_length, 3, 1)
+        predictions_list = hybrid2.run(target_weights, ohlcv_list, selector, x_scaler, y_scaler, candidate_features, sequence_length, 3, 1)
       case "Hybrid_QNN1_binary":
-        predictions_list = hybrid1.run_binary(target_weights, payload.prices, selector, x_scaler, candidate_features, sequence_length, 3, 1)
+        predictions_list = hybrid1.run_binary(target_weights, ohlcv_list, selector, x_scaler, candidate_features, sequence_length, 3, 1)
       case "Hybrid_QNN2_binary":
-        predictions_list = hybrid2.run_binary(target_weights, payload.prices, selector, x_scaler, candidate_features, sequence_length, 3, 1)
+        predictions_list = hybrid2.run_binary(target_weights, ohlcv_list, selector, x_scaler, candidate_features, sequence_length, 3, 1)
 
     results[model_name] = predictions_list
 
