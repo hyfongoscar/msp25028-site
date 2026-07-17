@@ -12,9 +12,14 @@ const apiBaseUrl = configuredApiBaseUrl
   ? configuredApiBaseUrl
   : `${window.location.origin}/api`;
 
+type ForecastResponse = {
+  predictions: Record<string, PricePoint[]>;
+  stats: Record<string, Record<string, number>>;
+};
+
 async function fetchForecast(
   prices: StockPricePoint[],
-): Promise<Record<string, PricePoint[]>> {
+): Promise<ForecastResponse> {
   const response = await fetch(`${apiBaseUrl.replace(/\/$/, '')}/predict`, {
     method: 'POST',
     headers: {
@@ -31,6 +36,7 @@ async function fetchForecast(
       string,
       number[] | { probability: number; prediction: number }[]
     >;
+    stats: Record<string, Record<string, number>>;
   };
 
   const formattedPredictions: Record<string, PricePoint[]> = {};
@@ -41,7 +47,7 @@ async function fetchForecast(
       probability: isNumber(p) ? undefined : p.probability,
     }));
   }
-  return formattedPredictions;
+  return { predictions: formattedPredictions, stats: result.stats };
 }
 
 async function fetchStockData(symbol: string): Promise<StockPayload> {

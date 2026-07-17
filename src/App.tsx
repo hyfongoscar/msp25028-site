@@ -57,6 +57,9 @@ export default function App() {
   const [loadedAsset, setLoadedAsset] = useState<string | null>(null);
   const [priceData, setPriceData] = useState<StockPricePoint[]>([]);
   const [predictedData, setPredictedData] = useState(defaultPredictions);
+  const [predictedStats, setPredictedStats] = useState<
+    Record<string, Record<string, number>>
+  >({});
   const [summary, setSummary] = useState<StockSummary | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -79,17 +82,19 @@ export default function App() {
 
     try {
       const result = await fetchStockData(symbol);
-      const predictions = await fetchForecast(result.points);
+      const forecast = await fetchForecast(result.points);
       setLoadedAsset(symbol);
       setPriceData(result.points);
-      setPredictedData(predictions);
       setSummary(result.summary);
+      setPredictedData(forecast.predictions);
+      setPredictedStats(forecast.stats);
       setRan(true);
     } catch (err) {
       setLoadedAsset(null);
       setPriceData([]);
-      setPredictedData(defaultPredictions);
       setSummary(null);
+      setPredictedData(defaultPredictions);
+      setPredictedStats({});
       setError(
         err instanceof Error ? err.message : 'Unable to load asset data.',
       );
@@ -188,12 +193,6 @@ export default function App() {
         </div>
       </header>
 
-      <div className="px-6 pb-0 pt-5">
-        <h1 className="m-0 text-[22px] font-bold tracking-[-0.01em] text-[#f0f2f5]">
-          Quantum Finance Predictor
-        </h1>
-      </div>
-
       <div className="grid flex-1 grid-cols-1 gap-4 px-6 py-4 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-4">
         <aside className="flex flex-col gap-4 self-start rounded-xl border border-white/10 bg-[#1A1F2C] p-5">
           <p className="m-0 font-mono text-[10px] font-bold uppercase tracking-widest text-[#8892a4]">
@@ -219,7 +218,7 @@ export default function App() {
             </button>
 
             {dropdownOpen && (
-              <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 max-h-72 overflow-y-auto rounded-lg border border-white/10 bg-[#222736] shadow-[0_8px_24px_rgba(0,0,0,0.4)] scrollbar-thin scrollbar-thumb-white/10">
+              <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 max-h-96 overflow-y-auto rounded-lg border border-white/10 bg-[#222736] shadow-[0_8px_24px_rgba(0,0,0,0.4)] scrollbar-thin scrollbar-thumb-white/10">
                 {/* Equities Category */}
                 <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8892a4] border-b border-white/5 bg-[#1e2230]">
                   Equities
@@ -296,6 +295,7 @@ export default function App() {
                 key={model.id}
                 model={model}
                 onClick={() => setActiveModel(model.id)}
+                predictedStats={predictedStats}
               />
             ))}
           </div>
