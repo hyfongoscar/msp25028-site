@@ -218,7 +218,8 @@ class QShallowRegressionLSTM(nn.Module):
 
         return out
 
-for model_name in []:
+# QLSTM
+for model_name in ['qlstm']:
   checkpoint = torch.load(CURRENT_DIR / "artifacts" / f"{model_name}.pt", map_location="cpu", weights_only=False)
 
   model = QShallowRegressionLSTM(
@@ -252,7 +253,8 @@ for model_name in []:
   np.save(save_path, weights_dict_np, allow_pickle=True)
   print(f"Weights successfully saved to {save_path}")
 
-for model in ['custom_qnn']:
+# Custom QNN
+for model in []:
   state_dict = torch.load(CURRENT_DIR / "artifacts" / f"{model}.pt", map_location="cpu")
 
   cleaned_weights = {}
@@ -264,7 +266,8 @@ for model in ['custom_qnn']:
   np.save(CURRENT_DIR / "weights" / f"{model}_weights.npy", cleaned_weights, allow_pickle=True)
   print(f"Cleaned weights file successfully generated for {model} model!")
 
-for model in []:
+# LSTM baseline and Hybrid QNN
+for model in ['lstm']:
   artifact = torch.load(CURRENT_DIR / "artifacts" / f"{model}.pt", map_location="cpu")
   state_dict = artifact["model_state_dict"] if "model_state_dict" in artifact else artifact['state_dict']
 
