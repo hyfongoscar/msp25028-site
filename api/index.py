@@ -90,13 +90,24 @@ PREPROCESSORS = {
   "Hybrid_QNN_binary": load_preprocessor("hybrid_qnn_binary.joblib"),
 }
 
+def normalize(a, min_a=None, max_a=None):
+    min_a, max_a = np.min(a, axis=0), np.max(a, axis=0)
+    return (a - min_a) / (max_a - min_a + 0.0001), min_a, max_a
+
 def get_regression_metrics(y_true: list[float], y_pred: list[float]) -> dict[str, float]:
     if len(y_true) != len(y_pred) or len(y_true) == 0:
         raise ValueError("y_true and y_pred must be non-empty and of the same length.")
+    
+    y_true_normalized, min_close, max_close = normalize(y_true)
+    y_pred_normalized, _, _ = normalize(y_pred, min_close, max_close)
+
+    # convert back to list float
+    y_true_normalized = y_true_normalized.tolist()
+    y_pred_normalized = y_pred_normalized.tolist()
         
-    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-    mae = mean_absolute_error(y_true, y_pred)
-    r2 = r2_score(y_true, y_pred)
+    rmse = np.sqrt(mean_squared_error(y_true_normalized, y_pred_normalized))
+    mae = mean_absolute_error(y_true_normalized, y_pred_normalized)
+    r2 = r2_score(y_true_normalized, y_pred_normalized)
     
     return {
         "rmse": float(rmse),
