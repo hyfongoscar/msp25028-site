@@ -179,13 +179,15 @@ export default function App() {
           <span className="text-[15px] font-semibold tracking-[0.02em] text-[#f0f2f5]">
             Comparative Analysis of Quantum Neural Networks in Finance
           </span>
-          <span className="mx-1 text-[15px] text-white/25">|</span>
-          <span className="font-mono text-[13px] font-normal uppercase tracking-[0.08em] text-[#8892a4]">
+          <span className="hidden lg:block mx-1 text-[15px] text-white/25">
+            |
+          </span>
+          <span className="hidden lg:block font-mono text-[13px] font-normal uppercase tracking-[0.08em] text-[#8892a4]">
             CAPSTONE
           </span>
         </div>
 
-        <div className="flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5">
+        <div className="hidden md:flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5">
           <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_#00ff88]" />
           <span className="font-mono text-[11px] font-medium uppercase tracking-wider text-emerald-400">
             {serviceState}
@@ -288,7 +290,7 @@ export default function App() {
             </p>
           </div>
 
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {MODELS.map(model => (
               <ModelCard
                 active={activeModel === model.id}
